@@ -6,6 +6,7 @@ import theme from './styles/theme';
 import Navbar from './components/Navbar';
 import InstallPrompt from './components/InstallPrompt';
 import Home from './pages/Home';
+import Landing from './pages/Landing';
 import Rewards from './pages/Rewards';
 import Wallet from './pages/Wallet';
 import Profile from './pages/Profile';
@@ -19,7 +20,8 @@ function App() {
         <TaskProvider>
           <Router>
             <Routes>
-              <Route path="/" element={<Home />} />
+              <Route path="/" element={<Landing />} />
+              <Route path="/home" element={<Home />} />
               <Route path="/rewards" element={<Rewards />} />
               <Route path="/wallet" element={<Wallet />} />
               <Route path="/profile" element={<Profile />} />
