@@ -1,6 +1,6 @@
 import { ThemeProvider } from '@mui/material/styles';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { TaskProvider } from './context/TaskContext';
 import theme from './styles/theme';
 import Navbar from './components/Navbar';
@@ -13,6 +13,32 @@ import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
+// Protected route wrapper
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div>Loading...</div>
+      </div>
+    );
+  }
+  return user ? children : <Navigate to="/login" />;
+}
+
+// Landing route with redirect for logged-in users
+function LandingRoute() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div>Loading...</div>
+      </div>
+    );
+  }
+  return user ? <Navigate to="/home" /> : <Landing />;
+}
+
 function App() {
   return (
     <ThemeProvider theme={theme}>
@@ -20,13 +46,15 @@ function App() {
         <TaskProvider>
           <Router>
             <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/home" element={<Home />} />
-              <Route path="/rewards" element={<Rewards />} />
-              <Route path="/wallet" element={<Wallet />} />
-              <Route path="/profile" element={<Profile />} />
+              <Route path="/" element={<LandingRoute />} />
+              <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+              <Route path="/rewards" element={<ProtectedRoute><Rewards /></ProtectedRoute>} />
+              <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              {/* Catch-all route */}
+              <Route path="*" element={<Navigate to="/" />} />
             </Routes>
             <Navbar />
             <InstallPrompt />

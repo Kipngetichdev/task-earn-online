@@ -1,157 +1,275 @@
-import { Container, Typography, Button, Box, Fade, Grid, Card, CardContent, CardActions } from '@mui/material';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import TaskIcon from '@mui/icons-material/Task';
+import {
+  Box,
+  Container,
+  Typography,
+  Card,
+  CardContent,
+  Button,
+  IconButton,
+  Drawer,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Divider,
+  CircularProgress,
+  Alert
+} from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import MenuIcon from '@mui/icons-material/Menu';
+import PersonIcon from '@mui/icons-material/Person';
+import HomeIcon from '@mui/icons-material/Home';
+import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
-import StarIcon from '@mui/icons-material/Star';
+import LogoutIcon from '@mui/icons-material/Logout';
+import { useAuth } from '../context/AuthContext';
+import { getTasks, getUserBalance, initiateWithdrawal } from '../services/firestore';
+
+// Drawer navigation items (mirrors Navbar.js)
+const drawerItems = [
+  { label: 'Home', path: '/home', icon: <HomeIcon /> },
+  { label: 'Rewards', path: '/rewards', icon: <CardGiftcardIcon /> },
+  { label: 'Wallet', path: '/wallet', icon: <AccountBalanceWalletIcon /> },
+  { label: 'Profile', path: '/profile', icon: <PersonIcon /> },
+  { label: 'Logout', path: 'logout', icon: <LogoutIcon /> }
+];
 
 function Home() {
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const imageUrl = 'https://static.vecteezy.com/system/resources/previews/046/013/478/non_2x/illustration-businessman-working-on-transparent-background-free-png.png';
+  const theme = useTheme();
+  const [tasks, setTasks] = useState([]);
+  const [balance, setBalance] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [alert, setAlert] = useState({ open: false, message: '', severity: 'info' });
 
-  // Mock task for highlight (replace with real data from Firestore)
-  const highlightedTask = {
-    title: 'Survey: Favorite App',
-    description: 'Share your favorite app and earn KES 3!',
-    reward: 3,
-    duration: 1,
-  };
+  // Fetch tasks and balance
+  useEffect(() => {
+    const fetchData = async () => {
+      if (user) {
+        try {
+          const [tasksData, balanceData] = await Promise.all([
+            getTasks(user.userId),
+            getUserBalance(user.userId)
+          ]);
+          setTasks(tasksData);
+          setBalance(balanceData);
+        } catch (error) {
+          setAlert({ open: true, message: 'Error fetching data: ' + error.message, severity: 'error' });
+        }
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, [user]);
 
-  if (!user) {
-    navigate('/landing'); // Redirect unauthenticated users
-    return null;
+  // Handle drawer toggle
+  const toggleDrawer = useCallback((open) => () => {
+    setDrawerOpen(open);
+  }, []);
+
+  // Handle drawer navigation
+  const handleDrawerNavigation = useCallback(
+    (path) => () => {
+      setDrawerOpen(false);
+      if (path === 'logout') {
+        logout();
+        navigate('/login');
+      } else {
+        navigate(path);
+      }
+    },
+    [navigate, logout]
+  );
+
+  // Handle withdrawal
+  const handleWithdraw = useCallback(async () => {
+    if (balance <= 0) {
+      setAlert({ open: true, message: 'Insufficient balance for withdrawal', severity: 'warning' });
+      return;
+    }
+    try {
+      await initiateWithdrawal(user.userId, user.phone, balance);
+      const newBalance = await getUserBalance(user.userId);
+      setBalance(newBalance);
+      setAlert({ open: true, message: 'Withdrawal initiated successfully', severity: 'success' });
+    } catch (error) {
+      setAlert({ open: true, message: 'Withdrawal failed: ' + error.message, severity: 'error' });
+    }
+  }, [user, balance]);
+
+  // Handle task start (placeholder)
+  const handleStartTask = useCallback((taskId) => () => {
+    // Placeholder: Update task status or navigate to task page
+    console.log(`Starting task: ${taskId}`);
+  }, []);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', pt: 2, pb: 8 }}>
-      {/* Image Header */}
+    <Box sx={{ minHeight: '100vh', backgroundColor: theme.palette.background.default }}>
+      {/* Top Bar */}
       <Box
         sx={{
-          width: '100%',
-          height: { xs: '180px', sm: '220px' },
+          position: 'sticky',
+          top: 0,
+          zIndex: 1100,
+          backgroundColor: theme.palette.background.paper,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          p: 1,
           display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          mb: 3,
-          position: 'relative',
-          background: 'linear-gradient(180deg, #F4F7ED 0%, rgba(134, 238, 96, 0.2) 100%)',
-          borderRadius: 2,
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}
       >
-        <Fade in timeout={1200}>
-          <img
-            src={imageUrl}
-            alt="Businessman working"
-            style={{
-              maxWidth: '75%',
-              maxHeight: '90%',
-              objectFit: 'contain',
-              zIndex: 2,
-              animation: 'scaleIn 1s ease-in-out',
-            }}
-            onError={(e) => (e.target.src = 'https://via.placeholder.com/150')}
-          />
-        </Fade>
+        <IconButton
+          aria-label="Open navigation menu"
+          onClick={toggleDrawer(true)}
+          sx={{ color: theme.palette.text.primary }}
+        >
+          <MenuIcon />
+        </IconButton>
+        <IconButton
+          aria-label="Go to profile"
+          onClick={() => navigate('/profile')}
+          sx={{ color: theme.palette.text.primary }}
+        >
+          <PersonIcon />
+        </IconButton>
       </Box>
 
-      {/* Content Section */}
-      <Container maxWidth="sm">
-        <Typography
-          variant="h2"
-          align="center"
-          gutterBottom
-          sx={{ fontSize: { xs: '1.8rem', sm: '2rem' } }}
+      {/* Navigation Drawer */}
+      <Drawer anchor="left" open={drawerOpen} onClose={toggleDrawer(false)}>
+        <Box
+          sx={{ width: 250, p: 2 }}
+          role="presentation"
+          onClick={toggleDrawer(false)}
+          onKeyDown={toggleDrawer(false)}
         >
-          Welcome, {user.displayName || 'User'}!
-        </Typography>
-        <Typography
-          variant="body1"
-          align="center"
-          color="text.secondary"
-          paragraph
-          sx={{ px: 2, mb: 3 }}
-        >
-          Ready to earn more KES? Complete tasks, check your wallet, or update your profile to keep the rewards coming!
-        </Typography>
+          <Typography variant="h3" sx={{ mb: 2 }}>
+            Tasks Pay
+          </Typography>
+          <Divider />
+          <List>
+            {drawerItems.map(({ label, path, icon }) => (
+              <ListItem button key={path} onClick={handleDrawerNavigation(path)}>
+                <ListItemIcon sx={{ color: theme.palette.text.secondary }}>{icon}</ListItemIcon>
+                <ListItemText
+                  primary={label}
+                  primaryTypographyProps={{
+                    fontFamily: theme.typography.fontFamily,
+                    fontSize: theme.typography.body1.fontSize
+                  }}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Drawer>
 
-        {/* Quick Actions */}
-        <Grid container spacing={2} sx={{ mb: 4 }}>
-          <Grid item xs={4}>
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              startIcon={<TaskIcon />}
-              onClick={() => navigate('/rewards')}
-              sx={{ py: 1.5 }}
-            >
-              Tasks
-            </Button>
-          </Grid>
-          <Grid item xs={4}>
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              startIcon={<AccountBalanceWalletIcon />}
-              onClick={() => navigate('/wallet')}
-              sx={{ py: 1.5 }}
-            >
-              Wallet
-            </Button>
-          </Grid>
-          <Grid item xs={4}>
-            <Button
-              variant="contained"
-              color="primary"
-              fullWidth
-              startIcon={<AccountCircleIcon />}
-              onClick={() => navigate('/profile')}
-              sx={{ py: 1.5 }}
-            >
-              Profile
-            </Button>
-          </Grid>
-        </Grid>
+      {/* Main Content */}
+      <Container maxWidth="sm" sx={{ py: 2, pb: { xs: '72px', sm: '80px' } }}>
+        {/* Alert for withdrawal feedback */}
+        {alert.open && (
+          <Alert
+            severity={alert.severity}
+            onClose={() => setAlert({ ...alert, open: false })}
+            sx={{ mb: 2 }}
+          >
+            {alert.message}
+          </Alert>
+        )}
 
-        {/* Highlighted Task */}
-        <Typography
-          variant="h3"
-          align="center"
-          gutterBottom
-          sx={{ fontSize: { xs: '1.4rem', sm: '1.6rem' } }}
+        {/* Balance Card */}
+        <Card
+          sx={{
+            mb: 4,
+            borderRadius: 4,
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            backgroundColor: theme.palette.background.paper,
+          }}
         >
-          Featured Task
-        </Typography>
-        <Fade in timeout={1000}>
-          <Card sx={{ mb: 3, borderRadius: 2, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}>
-            <CardContent>
-              <Typography variant="h3" color="text.primary" gutterBottom>
-                {highlightedTask.title}
-              </Typography>
-              <Typography variant="body1" color="text.secondary" paragraph>
-                {highlightedTask.description}
-              </Typography>
-              <Typography variant="body1" color="primary.main">
-                Reward: KES {highlightedTask.reward} | {highlightedTask.duration} min
-              </Typography>
-            </CardContent>
-            <CardActions>
+          <CardContent>
+          <Typography variant="h3" gutterBottom>
+              Hello {user.name || user.phone.split('@')[0]}! 👋
+            </Typography>
+            <Typography variant="h3" gutterBottom>
+              Your Balance
+            </Typography>
+            <Typography variant="h1" color="primary.main" sx={{ mb: 2 }}>
+              KES {balance}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2 }}>
               <Button
                 variant="contained"
                 color="primary"
-                fullWidth
-                startIcon={<StarIcon />}
-                onClick={() => navigate('/rewards')}
+                onClick={handleWithdraw}
+                disabled={balance <= 0}
+                sx={{ borderRadius: 2 }}
               >
-                Start Task
+                Withdraw
               </Button>
-            </CardActions>
-          </Card>
-        </Fade>
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={() => navigate('/wallet')}
+                sx={{ borderRadius: 2 }}
+              >
+                View Transactions
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Tasks List */}
+        <Typography variant="h3" gutterBottom>
+          Available Tasks
+        </Typography>
+        {tasks.length === 0 ? (
+          <Typography color="text.secondary">No tasks available.</Typography>
+        ) : (
+          tasks.map(task => (
+            <Card
+              key={task.id}
+              sx={{
+                p: 2,
+                mb: 2,
+                borderRadius: 12,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                backgroundColor: theme.palette.background.paper
+              }}
+            >
+              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+                <Typography variant="body1" fontWeight="500">
+                  {task.title}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  {task.description}
+                </Typography>
+                <Typography variant="body2" color="primary.main" sx={{ mb: 2 }}>
+                  Reward: KES {task.reward}
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleStartTask(task.id)}
+                  sx={{ borderRadius: 8 }}
+                >
+                  Start Task
+                </Button>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </Container>
     </Box>
   );
