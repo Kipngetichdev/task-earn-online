@@ -9,13 +9,14 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load user from localStorage and sync with Firestore
+    console.log('AuthContext: Checking localStorage for user');
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
-      // Fetch isActive from Firestore to ensure consistency
+      console.log('AuthContext: Found stored user:', parsedUser);
       getUserProfile(parsedUser.userId)
         .then((profile) => {
+          console.log('AuthContext: Fetched profile from Firestore:', profile);
           const updatedUser = {
             ...parsedUser,
             isActive: profile.isActive,
@@ -25,21 +26,27 @@ export const AuthProvider = ({ children }) => {
           };
           setUser(updatedUser);
           localStorage.setItem('user', JSON.stringify(updatedUser));
+          console.log('AuthContext: Updated user state:', updatedUser);
         })
         .catch((error) => {
-          console.error('Error syncing user profile:', error);
+          console.error('AuthContext: Error syncing user profile:', error);
           setUser(parsedUser); // Fallback to stored user
         })
-        .finally(() => setLoading(false));
+        .finally(() => {
+          setLoading(false);
+          console.log('AuthContext: Initial loading complete');
+        });
     } else {
       setLoading(false);
+      console.log('AuthContext: No stored user, loading complete');
     }
   }, []);
 
   const login = async (userData) => {
     try {
-      // Fetch user profile from Firestore to get isActive
+      console.log('AuthContext: Logging in user:', userData);
       const profile = await getUserProfile(userData.userId);
+      console.log('AuthContext: Fetched profile for login:', profile);
       const updatedUser = {
         ...userData,
         isActive: profile.isActive,
@@ -49,15 +56,17 @@ export const AuthProvider = ({ children }) => {
       };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      console.log('AuthContext: Login successful, user set:', updatedUser);
     } catch (error) {
-      console.error('Error during login:', error);
-      // Fallback to userData if Firestore fails
+      console.error('AuthContext: Error during login:', error);
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
+      console.log('AuthContext: Fallback login, user set:', userData);
     }
   };
 
   const logout = () => {
+    console.log('AuthContext: Logging out');
     setUser(null);
     localStorage.removeItem('user');
   };

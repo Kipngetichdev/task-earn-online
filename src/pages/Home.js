@@ -74,7 +74,7 @@ function Home() {
   const claimButtonRef = useRef(null);
   const activateButtonRef = useRef(null);
 
-  // Fetch balance, check welcome bonus, and show activation modal if inactive
+  // Fetch balance and check welcome bonus
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
@@ -84,17 +84,11 @@ function Home() {
             getDoc(doc(db, 'users', user.userId)),
           ]);
           setBalance(balanceData);
-          if (!userDoc.data().hasClaimedWelcomeBonus && user.isActive) {
+          if (!userDoc.data().hasClaimedWelcomeBonus) {
             setTimeout(() => {
               setModalOpen(true);
               setTimeout(() => claimButtonRef.current?.focus(), 100);
             }, 2000);
-          }
-          if (!user.isActive) {
-            setTimeout(() => {
-              setActivationModalOpen(true);
-              setTimeout(() => activateButtonRef.current?.focus(), 100);
-            }, 1000);
           }
         } catch (error) {
           setAlert({ open: true, message: 'Error fetching data: ' + error.message, severity: 'error' });
@@ -142,14 +136,31 @@ function Home() {
   }, [user, balance]);
 
   const handleClaimBonus = useCallback(async () => {
+    if (!user?.isActive) {
+      setAlert({ open: true, message: 'Please activate your account to claim the bonus.', severity: 'warning' });
+      setModalOpen(false);
+      setTimeout(() => {
+        setActivationModalOpen(true);
+        setTimeout(() => activateButtonRef.current?.focus(), 100);
+      }, 2000);
+      return;
+    }
     try {
       await claimWelcomeBonus(user.userId, bonusData.amount);
       const newBalance = await getUserBalance(user.userId);
       setBalance(newBalance);
       setModalOpen(false);
       setAlert({ open: true, message: 'Welcome bonus claimed successfully!', severity: 'success' });
+      // Trigger activation modal if account is still inactive (shouldn't happen, but for robustness)
+      if (!user?.isActive) {
+        setTimeout(() => {
+          setActivationModalOpen(true);
+          setTimeout(() => activateButtonRef.current?.focus(), 100);
+        }, 2000);
+      }
     } catch (error) {
       setAlert({ open: true, message: `Failed to claim bonus: ${error.message}`, severity: 'error' });
+      setModalOpen(false);
     }
   }, [user]);
 
@@ -157,7 +168,7 @@ function Home() {
     try {
       await activateUserAccount(user.userId);
       const updatedUser = { ...user, isActive: true };
-      login(updatedUser); // Update user state and localStorage using login
+      login(updatedUser); // Update user state and localStorage
       setActivationModalOpen(false);
       setAlert({ open: true, message: 'Account activated successfully!', severity: 'success' });
     } catch (error) {
