@@ -18,7 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import tasksData from './tasksData';
 import { updateTaskStatus, getUserBalance, updateUserProfile } from '../services/firestore';
 
-function Tasks() {
+function Tasks({ onActivateRequest }) {
   const { user } = useAuth();
   const theme = useTheme();
   const [tasks, setTasks] = useState([]);
@@ -84,6 +84,11 @@ function Tasks() {
           message: 'Please activate your account to start tasks.',
           severity: 'warning',
         });
+        if (onActivateRequest) {
+          setTimeout(() => {
+            onActivateRequest(); // Trigger Home.js activation modal
+          }, 1000);
+        }
         return;
       }
       setSelectedTask(task);
@@ -91,7 +96,7 @@ function Tasks() {
       setModalOpen(true);
       setTimeout(() => beginButtonRef.current?.focus(), 100);
     },
-    [user]
+    [user, onActivateRequest]
   );
 
   const handleCloseModal = useCallback(() => {
@@ -108,6 +113,20 @@ function Tasks() {
 
   const handleBeginTask = useCallback(async () => {
     if (!selectedTask || !user) return;
+    if (!user?.isActive) {
+      setAlert({
+        open: true,
+        message: 'Please activate your account to start tasks.',
+        severity: 'warning',
+      });
+      if (onActivateRequest) {
+        setTimeout(() => {
+          onActivateRequest(); // Trigger Home.js activation modal
+        }, 1000);
+      }
+      handleCloseModal();
+      return;
+    }
     try {
       // Update task status in Firestore
       await updateTaskStatus(user.userId, selectedTask.id, 'completed');
@@ -133,7 +152,7 @@ function Tasks() {
       });
     }
     handleCloseModal();
-  }, [selectedTask, user, handleCloseModal]);
+  }, [selectedTask, user, handleCloseModal, onActivateRequest]);
 
   if (loading) {
     return (

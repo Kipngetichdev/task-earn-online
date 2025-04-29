@@ -76,8 +76,8 @@ export const activateUserAccount = async (userId) => {
 export const claimWelcomeBonus = async (userId, amount) => {
   const userRef = doc(db, 'users', userId);
   const userDoc = await getDoc(userRef);
-  if (!userDoc.exists() || !userDoc.data().isActive) {
-    throw new Error('Account is not active');
+  if (!userDoc.exists()) {
+    throw new Error('User not found');
   }
   const currentBalance = await getUserBalance(userId);
   const newBalance = currentBalance + amount;

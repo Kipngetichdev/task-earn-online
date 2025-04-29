@@ -119,6 +119,10 @@ function Home() {
   const handleWithdraw = useCallback(async () => {
     if (!user?.isActive) {
       setAlert({ open: true, message: 'Please activate your account to withdraw funds.', severity: 'warning' });
+      setTimeout(() => {
+        setActivationModalOpen(true);
+        setTimeout(() => activateButtonRef.current?.focus(), 100);
+      }, 1000);
       return;
     }
     if (balance <= 0) {
@@ -136,33 +140,27 @@ function Home() {
   }, [user, balance]);
 
   const handleClaimBonus = useCallback(async () => {
-    if (!user?.isActive) {
-      setAlert({ open: true, message: 'Please activate your account to claim the bonus.', severity: 'warning' });
-      setModalOpen(false);
-      setTimeout(() => {
-        setActivationModalOpen(true);
-        setTimeout(() => activateButtonRef.current?.focus(), 100);
-      }, 2000);
-      return;
-    }
     try {
       await claimWelcomeBonus(user.userId, bonusData.amount);
       const newBalance = await getUserBalance(user.userId);
       setBalance(newBalance);
       setModalOpen(false);
       setAlert({ open: true, message: 'Welcome bonus claimed successfully!', severity: 'success' });
-      // Trigger activation modal if account is still inactive (shouldn't happen, but for robustness)
+      // Update user state to reflect hasClaimedWelcomeBonus
+      const updatedUser = { ...user, hasClaimedWelcomeBonus: true };
+      login(updatedUser);
+      // Suggest activation if account is inactive
       if (!user?.isActive) {
         setTimeout(() => {
           setActivationModalOpen(true);
           setTimeout(() => activateButtonRef.current?.focus(), 100);
-        }, 2000);
+        }, 1000);
       }
     } catch (error) {
       setAlert({ open: true, message: `Failed to claim bonus: ${error.message}`, severity: 'error' });
       setModalOpen(false);
     }
-  }, [user]);
+  }, [user, login]);
 
   const handleActivateAccount = useCallback(async () => {
     try {
@@ -397,7 +395,7 @@ function Home() {
                 variant="contained"
                 color="primary"
                 onClick={handleWithdraw}
-                disabled={balance <= 0 || !user?.isActive}
+                disabled={balance <= 0}
                 sx={{ borderRadius: 2 }}
               >
                 Withdraw
