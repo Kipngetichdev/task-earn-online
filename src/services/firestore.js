@@ -2,8 +2,16 @@ import { db } from './firebase';
 import { collection, getDocs, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 
 export const getTasks = async (userId) => {
-  const querySnapshot = await getDocs(collection(db, 'tasks'));
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  console.log('Fetching tasks for userId:', userId); // Debug
+  try {
+    const querySnapshot = await getDocs(collection(db, 'tasks'));
+    const tasks = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    console.log('Tasks fetched:', tasks); // Debug
+    return tasks;
+  } catch (error) {
+    console.error('getTasks error:', error); // Debug
+    throw error;
+  }
 };
 
 export const updateTaskStatus = async (userId, taskId, status) => {
@@ -39,4 +47,20 @@ export const getUserProfile = async (userId) => {
 
 export const updateUserProfile = async (userId, profile) => {
   await setDoc(doc(db, 'users', userId), profile, { merge: true });
+};
+
+export const claimWelcomeBonus = async (userId, amount) => {
+  const userRef = doc(db, 'users', userId);
+  const currentBalance = await getUserBalance(userId);
+  const newBalance = currentBalance + amount;
+  await updateDoc(userRef, {
+    balance: newBalance,
+    hasClaimedWelcomeBonus: true
+  });
+  await setDoc(doc(db, 'users', userId, 'bonuses', `${Date.now()}`), {
+    amount,
+    source: 'Digital Pay Jobs KE',
+    dateReceived: new Date(),
+    timestamp: new Date()
+  });
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -15,7 +15,16 @@ import {
   ListItemIcon,
   Divider,
   CircularProgress,
-  Alert
+  Alert,
+  Modal,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Fade
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -25,9 +34,13 @@ import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../context/AuthContext';
-import { getTasks, getUserBalance, initiateWithdrawal } from '../services/firestore';
+import { getUserBalance, initiateWithdrawal, claimWelcomeBonus } from '../services/firestore';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import congractImg from '../assets/congratulations.gif'; // Adjust if in public/
+import Tasks from '../components/Tasks'; // Import Tasks component
 
-// Drawer navigation items (mirrors Navbar.js)
+// Drawer navigation items
 const drawerItems = [
   { label: 'Home', path: '/home', icon: <HomeIcon /> },
   { label: 'Rewards', path: '/rewards', icon: <CardGiftcardIcon /> },
@@ -36,27 +49,40 @@ const drawerItems = [
   { label: 'Logout', path: 'logout', icon: <LogoutIcon /> }
 ];
 
+// Modal bonus data
+const bonusData = {
+  amount: 499,
+  source: 'Digital Pay Jobs KE',
+  dateReceived: new Date().toISOString().split('T')[0]
+};
+
 function Home() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
-  const [tasks, setTasks] = useState([]);
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'info' });
+  const [modalOpen, setModalOpen] = useState(false);
+  const claimButtonRef = useRef(null);
 
-  // Fetch tasks and balance
+  // Fetch balance and check welcome bonus
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
         try {
-          const [tasksData, balanceData] = await Promise.all([
-            getTasks(user.userId),
-            getUserBalance(user.userId)
+          const [balanceData, userDoc] = await Promise.all([
+            getUserBalance(user.userId),
+            getDoc(doc(db, 'users', user.userId))
           ]);
-          setTasks(tasksData);
           setBalance(balanceData);
+          if (!userDoc.data().hasClaimedWelcomeBonus) {
+            setTimeout(() => {
+              setModalOpen(true);
+              setTimeout(() => claimButtonRef.current?.focus(), 100);
+            }, 2000);
+          }
         } catch (error) {
           setAlert({ open: true, message: 'Error fetching data: ' + error.message, severity: 'error' });
         }
@@ -101,11 +127,18 @@ function Home() {
     }
   }, [user, balance]);
 
-  // Handle task start (placeholder)
-  const handleStartTask = useCallback((taskId) => () => {
-    // Placeholder: Update task status or navigate to task page
-    console.log(`Starting task: ${taskId}`);
-  }, []);
+  // Handle claim bonus
+  const handleClaimBonus = useCallback(async () => {
+    try {
+      await claimWelcomeBonus(user.userId, bonusData.amount);
+      const newBalance = await getUserBalance(user.userId);
+      setBalance(newBalance);
+      setModalOpen(false);
+      setAlert({ open: true, message: 'Welcome bonus claimed successfully!', severity: 'success' });
+    } catch (error) {
+      setAlert({ open: true, message: 'Failed to claim bonus: ' + error.message, severity: 'error' });
+    }
+  }, [user]);
 
   if (loading) {
     return (
@@ -176,9 +209,83 @@ function Home() {
         </Box>
       </Drawer>
 
+      {/* Welcome Bonus Modal */}
+      <Modal
+        open={modalOpen}
+        closeAfterTransition
+        disableEscapeKeyDown
+        disableBackdropClick
+        aria-labelledby="welcome-bonus-modal-title"
+        aria-describedby="welcome-bonus-modal-description"
+      >
+        <Fade in={modalOpen} timeout={500}>
+          <Box
+            sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: { xs: '90%', sm: 400 },
+              bgcolor: theme.palette.background.paper,
+              borderRadius: 1,
+              boxShadow: 24,
+              p: 4,
+              textAlign: 'center',
+              width: '80%'
+            }}
+          >
+            <img
+              src={congractImg}
+              alt="Congratulatory animation"
+              onError={(e) => (e.target.src = 'https://media.giphy.com/media/3o7aDcz7L5GrO2Gf6g/giphy.gif')}
+              style={{
+                width: '100%',
+                maxHeight: '150px',
+                objectFit: 'contain',
+                marginBottom: '16px'
+              }}
+            />
+            <Typography id="welcome-bonus-modal-title" variant="h2" gutterBottom>
+              Congratulations {user?.name}!
+            </Typography>
+            <Typography id="welcome-bonus-modal-description" variant="body1" sx={{ mb: 3 }}>
+              You have received KES 499 welcome bonus.
+            </Typography>
+            <TableContainer component={Paper} sx={{ mb: 3 }}>
+              <Table aria-label="Welcome bonus details">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 500 }}>Date Received</TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>Received From</TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>Total Amount</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>{bonusData.dateReceived}</TableCell>
+                    <TableCell>{bonusData.source}</TableCell>
+                    <TableCell>KES {bonusData.amount}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleClaimBonus}
+              sx={{ borderRadius: 2, minWidth: 200 }}
+              ref={claimButtonRef}
+              aria-label="Claim welcome bonus"
+            >
+              Claim Now
+            </Button>
+          </Box>
+        </Fade>
+      </Modal>
+
       {/* Main Content */}
-      <Container maxWidth="sm" sx={{ py: 2, pb: { xs: '72px', sm: '80px' } }}>
-        {/* Alert for withdrawal feedback */}
+      <Container maxWidth="sm" sx={{ py: 4, pb: { xs: '72px', sm: '80px' } }}>
+        {/* Alert for withdrawal/bonus feedback */}
         {alert.open && (
           <Alert
             severity={alert.severity}
@@ -195,12 +302,12 @@ function Home() {
             mb: 4,
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-            backgroundColor: theme.palette.background.paper,
+            backgroundColor: theme.palette.background.paper
           }}
         >
           <CardContent>
-          <Typography variant="h3" gutterBottom>
-              Hello {user.name || user.phone.split('@')[0]}! 👋
+            <Typography variant="h3" gutterBottom sx={{ fontWeight: 800 }}>
+              Hello {user?.name}! 👋
             </Typography>
             <Typography variant="h3" gutterBottom>
               Your Balance
@@ -230,46 +337,8 @@ function Home() {
           </CardContent>
         </Card>
 
-        {/* Tasks List */}
-        <Typography variant="h3" gutterBottom>
-          Available Tasks
-        </Typography>
-        {tasks.length === 0 ? (
-          <Typography color="text.secondary">No tasks available.</Typography>
-        ) : (
-          tasks.map(task => (
-            <Card
-              key={task.id}
-              sx={{
-                p: 2,
-                mb: 2,
-                borderRadius: 12,
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                backgroundColor: theme.palette.background.paper
-              }}
-            >
-              <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-                <Typography variant="body1" fontWeight="500">
-                  {task.title}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  {task.description}
-                </Typography>
-                <Typography variant="body2" color="primary.main" sx={{ mb: 2 }}>
-                  Reward: KES {task.reward}
-                </Typography>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleStartTask(task.id)}
-                  sx={{ borderRadius: 8 }}
-                >
-                  Start Task
-                </Button>
-              </CardContent>
-            </Card>
-          ))
-        )}
+        {/* Tasks Component */}
+        <Tasks />
       </Container>
     </Box>
   );
