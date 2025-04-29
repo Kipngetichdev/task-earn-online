@@ -1,3 +1,4 @@
+// src/components/Tasks.js
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
@@ -9,107 +10,13 @@ import {
   Alert,
   Modal,
   Fade,
-  LinearProgress
+  LinearProgress,
 } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import {
-  faLeaf,
-  faMicrochip,
-  faHeartbeat,
-  faMobileAlt,
-  faRecycle,
-  faFlask,
-  faMonument,
-  faBolt,
-  faLock,
-  faRocket
-} from '@fortawesome/free-solid-svg-icons';
 import { useTheme } from '@mui/material/styles';
 import { useAuth } from '../context/AuthContext';
-
-// Hardcoded task data with duration, reward, and Font Awesome icon
-const tasksData = [
-  {
-    id: 'task1',
-    title: 'Climate Action Quiz',
-    description: 'Test your knowledge on global climate change efforts and renewable energy solutions.',
-    duration: 120, // 2:00
-    reward: 25,
-    icon: faLeaf
-  },
-  {
-    id: 'task2',
-    title: 'AI Revolution Trivia',
-    description: 'How much do you know about artificial intelligence and its impact on jobs?',
-    duration: 90, // 1:30
-    reward: 22,
-    icon: faMicrochip
-  },
-  {
-    id: 'task3',
-    title: 'Global Health Awareness',
-    description: 'Learn about recent advancements in global health and answer a short quiz.',
-    duration: 135, // 2:15
-    reward: 28,
-    icon: faHeartbeat
-  },
-  {
-    id: 'task4',
-    title: 'Social Media Trends Quiz',
-    description: 'Are you up to date with 2025’s social media platforms and influencers?',
-    duration: 100, // 1:40
-    reward: 20,
-    icon: faMobileAlt
-  },
-  {
-    id: 'task5',
-    title: 'Sustainable Fashion Challenge',
-    description: 'Quiz yourself on eco-friendly fashion brands and practices.',
-    duration: 145, // 2:25
-    reward: 27,
-    icon: faRecycle
-  },
-  {
-    id: 'task6',
-    title: 'Tech Innovations 2025',
-    description: 'Explore cutting-edge tech like quantum computing and take a quiz.',
-    duration: 110, // 1:50
-    reward: 30,
-    icon: faFlask
-  },
-  {
-    id: 'task7',
-    title: 'Cultural Heritage Quiz',
-    description: 'Test your knowledge of global cultural landmarks and traditions.',
-    duration: 130, // 2:10
-    reward: 23,
-    icon: faMonument
-  },
-  {
-    id: 'task8',
-    title: 'Renewable Energy Trivia',
-    description: 'How well do you know solar, wind, and hydro power? Find out!',
-    duration: 95, // 1:35
-    reward: 26,
-    icon: faBolt
-  },
-  {
-    id: 'task9',
-    title: 'Digital Privacy Quiz',
-    description: 'Learn about protecting your data online with this quick quiz.',
-    duration: 140, // 2:20
-    reward: 24,
-    icon: faLock
-  },
-  {
-    id: 'task10',
-    title: 'Space Exploration Quiz',
-    description: 'Dive into the latest space missions and test your cosmic knowledge.',
-    duration: 115, // 1:55
-    reward: 29,
-    icon: faRocket
-  }
-];
+import tasksData from './tasksData';
+import { updateTaskStatus, getUserBalance, updateUserProfile } from '../services/firestore';
 
 function Tasks() {
   const { user } = useAuth();
@@ -122,44 +29,35 @@ function Tasks() {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const beginButtonRef = useRef(null);
 
-  // Set tasks directly
+  // Load tasks from tasksData
   useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        console.log('User ID:', user?.userId || 'No user');
-        setTasks(tasksData);
-        console.log('Tasks set:', tasksData);
-        if (tasksData.length === 0) {
-          setAlert({
-            open: true,
-            message: 'No tasks available.',
-            severity: 'warning'
-          });
-        }
-      } catch (error) {
-        console.error('Error setting tasks:', error);
+    if (!user) {
+      setAlert({
+        open: true,
+        message: 'Please log in to view tasks.',
+        severity: 'warning',
+      });
+      setLoading(false);
+      return;
+    }
+    try {
+      setTasks(tasksData);
+      if (tasksData.length === 0) {
         setAlert({
           open: true,
-          message: `Error setting tasks: ${error.message}`,
-          severity: 'error'
+          message: 'No tasks available.',
+          severity: 'warning',
         });
       }
-      setLoading(false);
-    };
-    fetchTasks();
+    } catch (error) {
+      setAlert({
+        open: true,
+        message: `Error loading tasks: ${error.message}`,
+        severity: 'error',
+      });
+    }
+    setLoading(false);
   }, [user]);
-
-  // Handle modal open and start timer
-  const handleOpenModal = useCallback(
-    (task) => () => {
-      console.log('Opening modal for task:', task);
-      setSelectedTask(task);
-      setTimeRemaining(task.duration);
-      setModalOpen(true);
-      setTimeout(() => beginButtonRef.current?.focus(), 100);
-    },
-    []
-  );
 
   // Timer for progress bar
   useEffect(() => {
@@ -178,23 +76,64 @@ function Tasks() {
     return () => clearInterval(timer);
   }, [modalOpen, timeRemaining]);
 
-  // Format duration as mm:ss
+  const handleOpenModal = useCallback(
+    (task) => () => {
+      if (!user?.isActive) {
+        setAlert({
+          open: true,
+          message: 'Please activate your account to start tasks.',
+          severity: 'warning',
+        });
+        return;
+      }
+      setSelectedTask(task);
+      setTimeRemaining(task.duration);
+      setModalOpen(true);
+      setTimeout(() => beginButtonRef.current?.focus(), 100);
+    },
+    [user]
+  );
+
+  const handleCloseModal = useCallback(() => {
+    setModalOpen(false);
+    setSelectedTask(null);
+    setTimeRemaining(0);
+  }, []);
+
   const formatDuration = (seconds) => {
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Close modal and start task
-  const handleBeginTask = useCallback(() => {
-    if (selectedTask) {
-      console.log(`Starting task: ${selectedTask.id}`);
-      // TODO: Implement task start logic
+  const handleBeginTask = useCallback(async () => {
+    if (!selectedTask || !user) return;
+    try {
+      // Update task status in Firestore
+      await updateTaskStatus(user.userId, selectedTask.id, 'completed');
+      
+      // Update user balance
+      const currentBalance = await getUserBalance(user.userId);
+      const newBalance = currentBalance + selectedTask.reward;
+      await updateUserProfile(user.userId, { balance: newBalance });
+
+      // Remove completed task from UI
+      setTasks((prev) => prev.filter((task) => task.id !== selectedTask.id));
+      
+      setAlert({
+        open: true,
+        message: `Task "${selectedTask.title}" completed! Earned KES ${selectedTask.reward}.`,
+        severity: 'success',
+      });
+    } catch (error) {
+      setAlert({
+        open: true,
+        message: `Failed to complete task: ${error.message}`,
+        severity: 'error',
+      });
     }
-    setModalOpen(false);
-    setSelectedTask(null);
-    setTimeRemaining(0);
-  }, [selectedTask]);
+    handleCloseModal();
+  }, [selectedTask, user, handleCloseModal]);
 
   if (loading) {
     return (
@@ -206,7 +145,6 @@ function Tasks() {
 
   return (
     <Box sx={{ py: 2 }}>
-      {/* Error Alert */}
       {alert.open && (
         <Alert
           severity={alert.severity}
@@ -217,10 +155,14 @@ function Tasks() {
         </Alert>
       )}
 
-      {/* Task List */}
       <Typography variant="h3" gutterBottom>
         Available Tasks
       </Typography>
+      {!user?.isActive && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Your account is inactive. Please activate your account to start tasks.
+        </Alert>
+      )}
       {tasks.length === 0 ? (
         <Typography color="text.secondary">No tasks available.</Typography>
       ) : (
@@ -232,18 +174,28 @@ function Tasks() {
               mb: 2,
               borderRadius: 4,
               boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-              backgroundColor: theme.palette.background.paper
+              backgroundColor: theme.palette.background.paper,
+              transition: 'transform 0.2s',
+              '&:hover': {
+                transform: 'scale(1.02)',
+              },
             }}
           >
             <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-              <Typography variant="body1" fontWeight="500">
-                {task.title}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <FontAwesomeIcon
+                  icon={task.icon}
+                  style={{ fontSize: 24, color: theme.palette.primary.main, marginRight: 8 }}
+                />
+                <Typography variant="body1" fontWeight="500">
+                  {task.title}
+                </Typography>
+              </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 {task.description}
               </Typography>
               <Typography variant="body2" color="primary.main" sx={{ mb: 2 }}>
-                Reward: KES {task.reward}
+                Reward: KES {task.reward} | Duration: {formatDuration(task.duration)}
               </Typography>
               <Button
                 variant="contained"
@@ -251,6 +203,7 @@ function Tasks() {
                 onClick={handleOpenModal(task)}
                 sx={{ borderRadius: 2 }}
                 aria-label={`Start task: ${task.title}`}
+                disabled={!user?.isActive}
               >
                 Start Task
               </Button>
@@ -259,13 +212,11 @@ function Tasks() {
         ))
       )}
 
-      {/* Instruction Modal */}
       {selectedTask && (
         <Modal
           open={modalOpen}
+          onClose={handleCloseModal}
           closeAfterTransition
-          disableEscapeKeyDown
-          disableBackdropClick
           aria-labelledby="task-instruction-modal-title"
           aria-describedby="task-instruction-modal-description"
         >
@@ -282,7 +233,6 @@ function Tasks() {
                 boxShadow: 24,
                 p: 4,
                 textAlign: 'center',
-                width: '80%'
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
@@ -310,20 +260,31 @@ function Tasks() {
               />
               {timeRemaining === 0 ? (
                 <Typography variant="body2" color="error.main" sx={{ mb: 3 }}>
-                  Time’s up!
+                  Time’s up! Please try again.
                 </Typography>
               ) : (
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleBeginTask}
-                  sx={{ borderRadius: 2, minWidth: 200 }}
-                  ref={beginButtonRef}
-                  aria-label={`Begin task: ${selectedTask.title}`}
-                  disabled={timeRemaining === 0}
-                >
-                  Begin Task
-                </Button>
+                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleBeginTask}
+                    sx={{ borderRadius: 2, minWidth: 120 }}
+                    ref={beginButtonRef}
+                    aria-label={`Begin task: ${selectedTask.title}`}
+                    disabled={timeRemaining === 0}
+                  >
+                    Begin Task
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    onClick={handleCloseModal}
+                    sx={{ borderRadius: 2, minWidth: 120 }}
+                    aria-label="Close task modal"
+                  >
+                    Close
+                  </Button>
+                </Box>
               )}
             </Box>
           </Fade>

@@ -1,3 +1,4 @@
+// src/pages/Home.js
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -24,7 +25,7 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Fade
+  Fade,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -34,11 +35,16 @@ import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../context/AuthContext';
-import { getUserBalance, initiateWithdrawal, claimWelcomeBonus } from '../services/firestore';
+import {
+  getUserBalance,
+  initiateWithdrawal,
+  claimWelcomeBonus,
+  activateUserAccount,
+} from '../services/firestore';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import congractImg from '../assets/congratulations.gif'; // Adjust if in public/
-import Tasks from '../components/Tasks'; // Import Tasks component
+import congractImg from '../assets/congratulations.gif';
+import Tasks from '../components/Tasks';
 
 // Drawer navigation items
 const drawerItems = [
@@ -46,18 +52,17 @@ const drawerItems = [
   { label: 'Rewards', path: '/rewards', icon: <CardGiftcardIcon /> },
   { label: 'Wallet', path: '/wallet', icon: <AccountBalanceWalletIcon /> },
   { label: 'Profile', path: '/profile', icon: <PersonIcon /> },
-  { label: 'Logout', path: 'logout', icon: <LogoutIcon /> }
+  { label: 'Logout', path: 'logout', icon: <LogoutIcon /> },
 ];
 
-// Modal bonus data
 const bonusData = {
   amount: 499,
   source: 'Digital Pay Jobs KE',
-  dateReceived: new Date().toISOString().split('T')[0]
+  dateReceived: new Date().toISOString().split('T')[0],
 };
 
 function Home() {
-  const { user, logout } = useAuth();
+  const { user, login, logout } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const [balance, setBalance] = useState(0);
@@ -65,23 +70,31 @@ function Home() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'info' });
   const [modalOpen, setModalOpen] = useState(false);
+  const [activationModalOpen, setActivationModalOpen] = useState(false);
   const claimButtonRef = useRef(null);
+  const activateButtonRef = useRef(null);
 
-  // Fetch balance and check welcome bonus
+  // Fetch balance, check welcome bonus, and show activation modal if inactive
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
         try {
           const [balanceData, userDoc] = await Promise.all([
             getUserBalance(user.userId),
-            getDoc(doc(db, 'users', user.userId))
+            getDoc(doc(db, 'users', user.userId)),
           ]);
           setBalance(balanceData);
-          if (!userDoc.data().hasClaimedWelcomeBonus) {
+          if (!userDoc.data().hasClaimedWelcomeBonus && user.isActive) {
             setTimeout(() => {
               setModalOpen(true);
               setTimeout(() => claimButtonRef.current?.focus(), 100);
             }, 2000);
+          }
+          if (!user.isActive) {
+            setTimeout(() => {
+              setActivationModalOpen(true);
+              setTimeout(() => activateButtonRef.current?.focus(), 100);
+            }, 1000);
           }
         } catch (error) {
           setAlert({ open: true, message: 'Error fetching data: ' + error.message, severity: 'error' });
@@ -92,12 +105,10 @@ function Home() {
     fetchData();
   }, [user]);
 
-  // Handle drawer toggle
   const toggleDrawer = useCallback((open) => () => {
     setDrawerOpen(open);
   }, []);
 
-  // Handle drawer navigation
   const handleDrawerNavigation = useCallback(
     (path) => () => {
       setDrawerOpen(false);
@@ -111,8 +122,11 @@ function Home() {
     [navigate, logout]
   );
 
-  // Handle withdrawal
   const handleWithdraw = useCallback(async () => {
+    if (!user?.isActive) {
+      setAlert({ open: true, message: 'Please activate your account to withdraw funds.', severity: 'warning' });
+      return;
+    }
     if (balance <= 0) {
       setAlert({ open: true, message: 'Insufficient balance for withdrawal', severity: 'warning' });
       return;
@@ -123,11 +137,10 @@ function Home() {
       setBalance(newBalance);
       setAlert({ open: true, message: 'Withdrawal initiated successfully', severity: 'success' });
     } catch (error) {
-      setAlert({ open: true, message: 'Withdrawal failed: ' + error.message, severity: 'error' });
+      setAlert({ open: true, message: `Withdrawal failed: ${error.message}`, severity: 'error' });
     }
   }, [user, balance]);
 
-  // Handle claim bonus
   const handleClaimBonus = useCallback(async () => {
     try {
       await claimWelcomeBonus(user.userId, bonusData.amount);
@@ -136,9 +149,21 @@ function Home() {
       setModalOpen(false);
       setAlert({ open: true, message: 'Welcome bonus claimed successfully!', severity: 'success' });
     } catch (error) {
-      setAlert({ open: true, message: 'Failed to claim bonus: ' + error.message, severity: 'error' });
+      setAlert({ open: true, message: `Failed to claim bonus: ${error.message}`, severity: 'error' });
     }
   }, [user]);
+
+  const handleActivateAccount = useCallback(async () => {
+    try {
+      await activateUserAccount(user.userId);
+      const updatedUser = { ...user, isActive: true };
+      login(updatedUser); // Update user state and localStorage using login
+      setActivationModalOpen(false);
+      setAlert({ open: true, message: 'Account activated successfully!', severity: 'success' });
+    } catch (error) {
+      setAlert({ open: true, message: `Failed to activate account: ${error.message}`, severity: 'error' });
+    }
+  }, [user, login]);
 
   if (loading) {
     return (
@@ -161,7 +186,7 @@ function Home() {
           p: 1,
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center'
+          alignItems: 'center',
         }}
       >
         <IconButton
@@ -200,7 +225,7 @@ function Home() {
                   primary={label}
                   primaryTypographyProps={{
                     fontFamily: theme.typography.fontFamily,
-                    fontSize: theme.typography.body1.fontSize
+                    fontSize: theme.typography.body1.fontSize,
                   }}
                 />
               </ListItem>
@@ -231,7 +256,6 @@ function Home() {
               boxShadow: 24,
               p: 4,
               textAlign: 'center',
-              width: '80%'
             }}
           >
             <img
@@ -242,7 +266,7 @@ function Home() {
                 width: '100%',
                 maxHeight: '150px',
                 objectFit: 'contain',
-                marginBottom: '16px'
+                marginBottom: '16px',
               }}
             />
             <Typography id="welcome-bonus-modal-title" variant="h2" gutterBottom>
@@ -283,9 +307,52 @@ function Home() {
         </Fade>
       </Modal>
 
+      {/* Account Activation Modal */}
+      <Modal
+        open={activationModalOpen}
+        closeAfterTransition
+        disableEscapeKeyDown
+        disableBackdropClick
+        aria-labelledby="activation-modal-title"
+        aria-describedby="activation-modal-description"
+      >
+        <Fade in={activationModalOpen} timeout={500}>
+          <Box
+            sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: { xs: '90%', sm: 400 },
+              bgcolor: theme.palette.background.paper,
+              borderRadius: 1,
+              boxShadow: 24,
+              p: 4,
+              textAlign: 'center',
+            }}
+          >
+            <Typography id="activation-modal-title" variant="h2" gutterBottom>
+              Activate Your Account
+            </Typography>
+            <Typography id="activation-modal-description" variant="body1" sx={{ mb: 3 }}>
+              Please activate your account to start tasks and withdraw earnings.
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleActivateAccount}
+              sx={{ borderRadius: 2, minWidth: 200 }}
+              ref={activateButtonRef}
+              aria-label="Activate account"
+            >
+              Activate Now
+            </Button>
+          </Box>
+        </Fade>
+      </Modal>
+
       {/* Main Content */}
       <Container maxWidth="sm" sx={{ py: 4, pb: { xs: '72px', sm: '80px' } }}>
-        {/* Alert for withdrawal/bonus feedback */}
         {alert.open && (
           <Alert
             severity={alert.severity}
@@ -296,13 +363,12 @@ function Home() {
           </Alert>
         )}
 
-        {/* Balance Card */}
         <Card
           sx={{
             mb: 4,
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-            backgroundColor: theme.palette.background.paper
+            backgroundColor: theme.palette.background.paper,
           }}
         >
           <CardContent>
@@ -320,7 +386,7 @@ function Home() {
                 variant="contained"
                 color="primary"
                 onClick={handleWithdraw}
-                disabled={balance <= 0}
+                disabled={balance <= 0 || !user?.isActive}
                 sx={{ borderRadius: 2 }}
               >
                 Withdraw
@@ -337,7 +403,6 @@ function Home() {
           </CardContent>
         </Card>
 
-        {/* Tasks Component */}
         <Tasks />
       </Container>
     </Box>
