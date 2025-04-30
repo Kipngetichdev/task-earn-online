@@ -1,6 +1,5 @@
-// services/firestore.js
 import { db } from './firebase';
-import { collection, getDocs, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, setDoc, query, where } from 'firebase/firestore';
 
 export const getTasks = async (userId) => {
   console.log('Fetching tasks for userId:', userId);
@@ -105,7 +104,6 @@ export const createUserProfile = async (userId, userData) => {
   });
 };
 
-// New function for fetching bonuses
 export const getBonuses = async (userId) => {
   try {
     const querySnapshot = await getDocs(collection(db, 'users', userId, 'bonuses'));
@@ -115,5 +113,48 @@ export const getBonuses = async (userId) => {
   } catch (error) {
     console.error('getBonuses error:', error);
     throw error;
+  }
+};
+
+// Generate a unique referral code for a user
+export const generateReferralCode = async (userId) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+
+    if (userSnap.exists() && userSnap.data().referralCode) {
+      // Return existing referral code if it exists
+      return userSnap.data().referralCode;
+    }
+
+    // Generate a new 6-character alphanumeric referral code
+    const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    // Save the referral code to the user's document
+    await setDoc(userRef, { referralCode }, { merge: true });
+    return referralCode;
+  } catch (error) {
+    console.error('Error generating referral code:', error);
+    throw new Error('Failed to generate referral code');
+  }
+};
+
+// Get referral history for a user
+export const getReferralHistory = async (userId) => {
+  try {
+    const referralsRef = collection(db, 'referrals');
+    const q = query(referralsRef, where('referrerId', '==', userId));
+    const querySnapshot = await getDocs(q);
+
+    const referrals = querySnapshot.docs.map((doc) => ({
+      referredUserId: doc.data().referredUserId,
+      timestamp: doc.data().timestamp,
+      ...doc.data(),
+    }));
+
+    return referrals;
+  } catch (error) {
+    console.error('Error fetching referral history:', error);
+    throw new Error('Failed to fetch referral history');
   }
 };

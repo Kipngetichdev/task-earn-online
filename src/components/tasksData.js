@@ -1,4 +1,3 @@
-// src/components/tasksData.js
 import {
     faLeaf,
     faMicrochip,
@@ -20,6 +19,7 @@ import {
       duration: 120, // 2:00
       reward: 25,
       icon: faLeaf,
+      link: 'https://sawutser.top/4/9273543',
     },
     {
       id: 'task2',
@@ -28,6 +28,7 @@ import {
       duration: 90, // 1:30
       reward: 22,
       icon: faMicrochip,
+      link: 'https://sawutser.top/4/9273544',
     },
     {
       id: 'task3',
@@ -36,6 +37,7 @@ import {
       duration: 135, // 2:15
       reward: 28,
       icon: faHeartbeat,
+      link: 'https://sawutser.top/4/9280245',
     },
     {
       id: 'task4',
@@ -44,6 +46,7 @@ import {
       duration: 100, // 1:40
       reward: 20,
       icon: faMobileAlt,
+      link: 'https://sawutser.top/4/9273543', // Cycle: Link 1
     },
     {
       id: 'task5',
@@ -52,6 +55,7 @@ import {
       duration: 145, // 2:25
       reward: 27,
       icon: faRecycle,
+      link: 'https://sawutser.top/4/9273544', // Cycle: Link 2
     },
     {
       id: 'task6',
@@ -60,6 +64,7 @@ import {
       duration: 110, // 1:50
       reward: 30,
       icon: faFlask,
+      link: 'https://sawutser.top/4/9280245', // Cycle: Link 3
     },
     {
       id: 'task7',
@@ -68,6 +73,7 @@ import {
       duration: 130, // 2:10
       reward: 23,
       icon: faMonument,
+      link: 'https://sawutser.top/4/9273543', // Cycle: Link 1
     },
     {
       id: 'task8',
@@ -76,6 +82,7 @@ import {
       duration: 95, // 1:35
       reward: 26,
       icon: faBolt,
+      link: 'https://sawutser.top/4/9273544', // Cycle: Link 2
     },
     {
       id: 'task9',
@@ -84,6 +91,7 @@ import {
       duration: 140, // 2:20
       reward: 24,
       icon: faLock,
+      link: 'https://sawutser.top/4/9280245', // Cycle: Link 3
     },
     {
       id: 'task10',
@@ -92,6 +100,7 @@ import {
       duration: 115, // 1:55
       reward: 29,
       icon: faRocket,
+      link: 'https://sawutser.top/4/9273543', // Cycle: Link 1
     },
   ];
   
