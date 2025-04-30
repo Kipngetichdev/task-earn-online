@@ -27,6 +27,7 @@ function Tasks({ onActivateRequest }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
+  const [taskStarted, setTaskStarted] = useState(false);
   const beginButtonRef = useRef(null);
 
   // Load tasks from tasksData
@@ -59,10 +60,10 @@ function Tasks({ onActivateRequest }) {
     setLoading(false);
   }, [user]);
 
-  // Timer for progress bar
+  // Timer for progress bar, only runs when taskStarted is true
   useEffect(() => {
     let timer;
-    if (modalOpen && timeRemaining > 0) {
+    if (modalOpen && taskStarted && timeRemaining > 0) {
       timer = setInterval(() => {
         setTimeRemaining((prev) => {
           if (prev <= 1) {
@@ -74,35 +75,24 @@ function Tasks({ onActivateRequest }) {
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [modalOpen, timeRemaining]);
+  }, [modalOpen, taskStarted, timeRemaining]);
 
   const handleOpenModal = useCallback(
     (task) => () => {
-      if (!user?.isActive) {
-        setAlert({
-          open: true,
-          message: 'Please activate your account to start tasks.',
-          severity: 'warning',
-        });
-        if (onActivateRequest) {
-          setTimeout(() => {
-            onActivateRequest(); // Trigger Home.js activation modal
-          }, 1000);
-        }
-        return;
-      }
       setSelectedTask(task);
       setTimeRemaining(task.duration);
+      setTaskStarted(false);
       setModalOpen(true);
       setTimeout(() => beginButtonRef.current?.focus(), 100);
     },
-    [user, onActivateRequest]
+    []
   );
 
   const handleCloseModal = useCallback(() => {
     setModalOpen(false);
     setSelectedTask(null);
     setTimeRemaining(0);
+    setTaskStarted(false);
   }, []);
 
   const formatDuration = (seconds) => {
@@ -128,17 +118,12 @@ function Tasks({ onActivateRequest }) {
       return;
     }
     try {
-      // Update task status in Firestore
+      setTaskStarted(true);
       await updateTaskStatus(user.userId, selectedTask.id, 'completed');
-      
-      // Update user balance
       const currentBalance = await getUserBalance(user.userId);
       const newBalance = currentBalance + selectedTask.reward;
       await updateUserProfile(user.userId, { balance: newBalance });
-
-      // Remove completed task from UI
       setTasks((prev) => prev.filter((task) => task.id !== selectedTask.id));
-      
       setAlert({
         open: true,
         message: `Task "${selectedTask.title}" completed! Earned KES ${selectedTask.reward}.`,
@@ -222,7 +207,6 @@ function Tasks({ onActivateRequest }) {
                 onClick={handleOpenModal(task)}
                 sx={{ borderRadius: 2 }}
                 aria-label={`Start task: ${task.title}`}
-                disabled={!user?.isActive}
               >
                 Start Task
               </Button>
@@ -252,6 +236,7 @@ function Tasks({ onActivateRequest }) {
                 boxShadow: 24,
                 p: 4,
                 textAlign: 'center',
+                width:'80%',
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
@@ -274,10 +259,10 @@ function Tasks({ onActivateRequest }) {
               </Typography>
               <LinearProgress
                 variant="determinate"
-                value={(timeRemaining / selectedTask.duration) * 100}
+                value={taskStarted ? (timeRemaining / selectedTask.duration) * 100 : 100}
                 sx={{ mb: 3 }}
               />
-              {timeRemaining === 0 ? (
+              {timeRemaining === 0 && taskStarted ? (
                 <Typography variant="body2" color="error.main" sx={{ mb: 3 }}>
                   Time’s up! Please try again.
                 </Typography>
@@ -290,7 +275,6 @@ function Tasks({ onActivateRequest }) {
                     sx={{ borderRadius: 2, minWidth: 120 }}
                     ref={beginButtonRef}
                     aria-label={`Begin task: ${selectedTask.title}`}
-                    disabled={timeRemaining === 0}
                   >
                     Begin Task
                   </Button>

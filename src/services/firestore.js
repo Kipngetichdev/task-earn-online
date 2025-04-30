@@ -104,3 +104,16 @@ export const createUserProfile = async (userId, userData) => {
     createdAt: new Date(),
   });
 };
+
+// New function for fetching bonuses
+export const getBonuses = async (userId) => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'users', userId, 'bonuses'));
+    const bonuses = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    console.log('Bonuses fetched:', bonuses);
+    return bonuses;
+  } catch (error) {
+    console.error('getBonuses error:', error);
+    throw error;
+  }
+};
