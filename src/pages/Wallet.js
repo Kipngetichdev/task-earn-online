@@ -1,4 +1,3 @@
-// src/pages/Wallet.js
 import { useState, useEffect } from 'react';
 import {
   Container,
@@ -93,6 +92,7 @@ function Wallet({ onActivateRequest }) {
           setBalance(balanceData);
           setHistory(historyData);
         } catch (error) {
+          console.error('Wallet data fetch error:', error.message, error.stack);
           setAlert({
             open: true,
             message: `Error loading wallet data: ${error.message}`,
@@ -107,8 +107,10 @@ function Wallet({ onActivateRequest }) {
     }
   }, [user]);
 
-  const handleWithdraw = async ({ phone, amount }) => {
+  // Handle Withdraw button click
+  const handleWithdrawClick = () => {
     if (!user?.isActive) {
+      console.log('Withdraw clicked by inactive user:', user?.userId);
       setAlert({
         open: true,
         message: 'Please activate your account to withdraw funds.',
@@ -116,6 +118,35 @@ function Wallet({ onActivateRequest }) {
       });
       if (onActivateRequest) {
         setTimeout(() => {
+          console.log('Triggering onActivateRequest for activation modal');
+          onActivateRequest(); // Trigger Home.js activation modal
+        }, 1000);
+      } else {
+        console.error('onActivateRequest callback not provided');
+        setAlert({
+          open: true,
+          message: 'Activation required, but unable to proceed. Please try again from the Home page.',
+          severity: 'error',
+        });
+      }
+    } else {
+      console.log('Opening WithdrawalModal for active user:', user?.userId);
+      setOpenModal(true); // Open WithdrawalModal for active users
+    }
+  };
+
+  // Handle withdrawal submission from WithdrawalModal
+  const handleWithdraw = async ({ phone, amount }) => {
+    if (!user?.isActive) {
+      console.error('Withdrawal attempted by inactive user:', user?.userId);
+      setAlert({
+        open: true,
+        message: 'Please activate your account to withdraw funds.',
+        severity: 'warning',
+      });
+      if (onActivateRequest) {
+        setTimeout(() => {
+          console.log('Triggering onActivateRequest from handleWithdraw');
           onActivateRequest(); // Trigger Home.js activation modal
         }, 1000);
       }
@@ -124,6 +155,7 @@ function Wallet({ onActivateRequest }) {
     }
 
     if (amount <= 0 || amount > balance) {
+      console.error('Invalid withdrawal amount:', amount, 'Balance:', balance);
       setAlert({
         open: true,
         message: 'Invalid withdrawal amount.',
@@ -134,7 +166,9 @@ function Wallet({ onActivateRequest }) {
     }
 
     try {
-      await initiateWithdrawal(user.userId, phone, amount);
+      console.log('Initiating withdrawal:', { userId: user.userId, phone, amount });
+      const reference = await initiateWithdrawal(user.userId, phone, amount);
+      console.log('Withdrawal reference:', reference);
       const [newBalance, newHistory] = await Promise.all([
         getUserBalance(user.userId),
         getWithdrawalHistory(user.userId),
@@ -143,10 +177,11 @@ function Wallet({ onActivateRequest }) {
       setHistory(newHistory);
       setAlert({
         open: true,
-        message: 'Withdrawal initiated successfully.',
+        message: 'Withdrawal initiated successfully. Check your phone.',
         severity: 'success',
       });
     } catch (error) {
+      console.error('Withdrawal error:', error.message, error.stack);
       setAlert({
         open: true,
         message: `Withdrawal failed: ${error.message}`,
@@ -154,24 +189,6 @@ function Wallet({ onActivateRequest }) {
       });
     }
     setOpenModal(false);
-  };
-
-  // Handle Withdraw button click
-  const handleWithdrawClick = () => {
-    if (!user?.isActive) {
-      setAlert({
-        open: true,
-        message: 'Please activate your account to withdraw funds.',
-        severity: 'warning',
-      });
-      if (onActivateRequest) {
-        setTimeout(() => {
-          onActivateRequest(); // Trigger Home.js activation modal
-        }, 1000);
-      }
-    } else {
-      setOpenModal(true); // Open WithdrawalModal for active users
-    }
   };
 
   // Prepare chart data

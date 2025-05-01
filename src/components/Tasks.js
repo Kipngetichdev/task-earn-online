@@ -1,4 +1,3 @@
-// src/components/Tasks.js
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
@@ -16,7 +15,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useTheme } from '@mui/material/styles';
 import { useAuth } from '../context/AuthContext';
 import tasksData from './tasksData';
-import { updateTaskStatus, getUserBalance, updateUserProfile } from '../services/firestore';
+import { completeTask } from '../services/firestore';
 
 function Tasks({ onActivateRequest }) {
   const { user } = useAuth();
@@ -60,7 +59,7 @@ function Tasks({ onActivateRequest }) {
     setLoading(false);
   }, [user]);
 
-  // Timer for progress bar, only runs when taskStarted is true
+  // Timer for progress bar
   useEffect(() => {
     let timer;
     if (modalOpen && taskStarted && timeRemaining > 0) {
@@ -101,7 +100,7 @@ function Tasks({ onActivateRequest }) {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleBeginTask = useCallback(async () => {
+  const handleBeginTask = useCallback(() => {
     if (!selectedTask || !user) return;
     if (!user?.isActive) {
       setAlert({
@@ -111,24 +110,36 @@ function Tasks({ onActivateRequest }) {
       });
       if (onActivateRequest) {
         setTimeout(() => {
-          onActivateRequest(); // Trigger Home.js activation modal
+          onActivateRequest();
         }, 1000);
       }
       handleCloseModal();
       return;
     }
-    try {
+    if (selectedTask.link) {
+      window.open(selectedTask.link, '_blank');
       setTaskStarted(true);
-      await updateTaskStatus(user.userId, selectedTask.id, 'completed');
-      const currentBalance = await getUserBalance(user.userId);
-      const newBalance = currentBalance + selectedTask.reward;
-      await updateUserProfile(user.userId, { balance: newBalance });
+    } else {
+      setAlert({
+        open: true,
+        message: 'This task is not available at the moment.',
+        severity: 'info',
+      });
+      handleCloseModal();
+    }
+  }, [selectedTask, user, handleCloseModal, onActivateRequest]);
+
+  const handleCompleteTask = useCallback(async () => {
+    if (!selectedTask || !user) return;
+    try {
+      await completeTask(user.userId, selectedTask.id, selectedTask.reward);
       setTasks((prev) => prev.filter((task) => task.id !== selectedTask.id));
       setAlert({
         open: true,
         message: `Task "${selectedTask.title}" completed! Earned KES ${selectedTask.reward}.`,
         severity: 'success',
       });
+      handleCloseModal();
     } catch (error) {
       setAlert({
         open: true,
@@ -136,8 +147,7 @@ function Tasks({ onActivateRequest }) {
         severity: 'error',
       });
     }
-    handleCloseModal();
-  }, [selectedTask, user, handleCloseModal, onActivateRequest]);
+  }, [selectedTask, user, handleCloseModal]);
 
   if (loading) {
     return (
@@ -158,7 +168,6 @@ function Tasks({ onActivateRequest }) {
           {alert.message}
         </Alert>
       )}
-
       <Typography variant="h3" gutterBottom>
         Available Tasks
       </Typography>
@@ -214,7 +223,6 @@ function Tasks({ onActivateRequest }) {
           </Card>
         ))
       )}
-
       {selectedTask && (
         <Modal
           open={modalOpen}
@@ -236,7 +244,7 @@ function Tasks({ onActivateRequest }) {
                 boxShadow: 24,
                 p: 4,
                 textAlign: 'center',
-                width:'80%',
+                width: '80%',
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
@@ -263,9 +271,26 @@ function Tasks({ onActivateRequest }) {
                 sx={{ mb: 3 }}
               />
               {timeRemaining === 0 && taskStarted ? (
-                <Typography variant="body2" color="error.main" sx={{ mb: 3 }}>
-                  Time’s up! Please try again.
-                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleCompleteTask}
+                    sx={{ borderRadius: 2, minWidth: 120 }}
+                    aria-label={`Complete task: ${selectedTask.title}`}
+                  >
+                    Complete Task
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    onClick={handleCloseModal}
+                    sx={{ borderRadius: 2, minWidth: 120 }}
+                    aria-label="Close task modal"
+                  >
+                    Close
+                  </Button>
+                </Box>
               ) : (
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
                   <Button
