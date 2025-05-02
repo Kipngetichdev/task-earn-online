@@ -62,7 +62,7 @@ module.exports = async (req, res) => {
     const payload = {
       amount: Number(amount),
       phone_number: formattedPhone,
-      channel_id: 2162,
+      channel_id: 1874,
       provider: 'm-pesa',
       external_reference: reference,
       callback_url: callbackUrl,
@@ -74,7 +74,7 @@ module.exports = async (req, res) => {
       payload,
       {
         headers: { Authorization: authToken, 'Content-Type': 'application/json' },
-        timeout: 10000,
+        timeout: 20000,
       }
     );
 

@@ -12,11 +12,11 @@ import {
   Alert,
   CircularProgress,
   Table,
-  TableBody,
-  TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  TableCell,
+  TableBody,
   Paper,
 } from '@mui/material';
 import {
@@ -29,6 +29,9 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { generateReferralCode, getReferralHistory } from '../services/firestore';
+
+// Define the app's base URL (replace with your actual app URL)
+const APP_URL = 'https://taskspay-to-mpesa.vercel.app/';
 
 // Format timestamp as "MMM YYYY"
 const formatMonth = (timestamp) => {
@@ -47,21 +50,33 @@ const alertIcons = {
 
 function Profile() {
   const { user, loading: authLoading } = useAuth();
-  const [referralCode, setReferralCode] = useState('');
+  const [referralLink, setReferralLink] = useState('');
   const [referrals, setReferrals] = useState([]);
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'info' });
   const [referralLoading, setReferralLoading] = useState(true);
 
+  // Auto-dismiss alerts after 5 seconds
+  useEffect(() => {
+    if (alert.open) {
+      const timer = setTimeout(() => {
+        setAlert({ ...alert, open: false });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [alert]);
+
   // Fetch referral code and referral history
   useEffect(() => {
-    if (user) {
+    if (user?.userId) {
       const fetchReferralData = async () => {
         try {
           const [code, referralData] = await Promise.all([
             generateReferralCode(user.userId),
             getReferralHistory(user.userId),
           ]);
-          setReferralCode(code);
+          // Combine the app URL with the referral code
+          const fullReferralLink = `${APP_URL}/?ref=${code}`;
+          setReferralLink(fullReferralLink);
           setReferrals(referralData);
         } catch (error) {
           setAlert({
@@ -74,21 +89,26 @@ function Profile() {
       };
       fetchReferralData();
     } else {
+      setAlert({
+        open: true,
+        message: 'User ID not found. Please log in again.',
+        severity: 'error',
+      });
       setReferralLoading(false);
     }
   }, [user]);
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(referralCode).then(() => {
+    navigator.clipboard.writeText(referralLink).then(() => {
       setAlert({
         open: true,
-        message: 'Referral code copied to clipboard!',
+        message: 'Referral link copied to clipboard!',
         severity: 'success',
       });
     }).catch(() => {
       setAlert({
         open: true,
-        message: 'Failed to copy referral code.',
+        message: 'Failed to copy referral link.',
         severity: 'error',
       });
     });
@@ -115,6 +135,18 @@ function Profile() {
           severity={alert.severity}
           onClose={() => setAlert({ ...alert, open: false })}
           sx={{ mb: 2 }}
+          action={
+            alert.severity === 'error' ? (
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => window.location.reload()}
+                aria-label="Retry loading referral data"
+              >
+                Retry
+              </Button>
+            ) : null
+          }
         >
           {alert.message}
         </Alert>
@@ -182,14 +214,15 @@ function Profile() {
                 </Typography>
               </Stack>
               <Typography color="text.secondary" sx={{ mb: 2 }}>
-                Earn KES 100 for every friend who signs up with your referral code!
+                Earn KES 100 for every friend who signs up with your referral link!
               </Typography>
               <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
                 <TextField
-                  label="Your Referral Code"
-                  value={referralCode}
+                  label="Your Referral Link"
+                  value={referralLink}
                   fullWidth
                   InputProps={{ readOnly: true }}
+                  aria-describedby="referral-link-description"
                 />
                 <Button
                   variant="outlined"
@@ -197,16 +230,21 @@ function Profile() {
                   onClick={handleCopyCode}
                   sx={{ borderRadius: 2, textTransform: 'none' }}
                   startIcon={<ContentCopy />}
+                  disabled={!referralLink}
+                  aria-label="Copy referral link"
                 >
                   Copy
                 </Button>
               </Stack>
+              <Typography id="referral-link-description" color="text.secondary" sx={{ mb: 2 }}>
+                Share this link with friends to earn rewards.
+              </Typography>
               <Typography variant="h6" sx={{ mb: 1 }}>
                 Referral Earnings: KES {referrals.length * 100}
               </Typography>
               {referrals.length === 0 ? (
                 <Typography color="text.secondary" align="center">
-                  No referrals yet. Share your code to start earning!
+                  No referrals yet. Share your link to start earning!
                 </Typography>
               ) : (
                 <TableContainer component={Paper}>
@@ -221,7 +259,7 @@ function Profile() {
                     <TableBody>
                       {referrals.map((referral) => (
                         <TableRow key={referral.referredUserId}>
-                          <TableCell>{referral.referredUserId}</TableCell>
+                          <TableCell>{referral.referredUserName || referral.referredUserId}</TableCell>
                           <TableCell>{formatMonth(referral.timestamp)}</TableCell>
                           <TableCell>KES 100</TableCell>
                         </TableRow>
