@@ -13,7 +13,7 @@ export const initiateWithdrawal = async (userId, phoneNumber, amount) => {
     if (!userDoc.exists() || !userDoc.data().isActive) {
       throw new Error('Account is not active');
     }
-    const clientReference = `${userId}_${Date.now()}`; // Removed 'withdrawal_' prefix
+    const clientReference = `${userId}_${Date.now()}`;
     const response = await fetch(`${process.env.REACT_APP_BASE_URL}/api/stk-push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -101,7 +101,7 @@ export const getBonuses = async (userId) => {
 
 export const activateUserAccount = async (userId, phoneNumber) => {
   try {
-    const clientReference = `${userId}_${Date.now()}`; // Removed 'activation_' prefix
+    const clientReference = `${userId}_${Date.now()}`;
     const response = await fetch(`${process.env.REACT_APP_BASE_URL}/api/stk-push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -226,5 +226,39 @@ export const getReferralHistory = async (userId) => {
   } catch (error) {
     console.error('Error fetching referral history:', error);
     throw new Error('Failed to fetch referral history');
+  }
+};
+
+export const getTaskState = async (userId) => {
+  try {
+    const docRef = doc(db, 'users', userId, 'taskStates', 'states');
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? docSnap.data() : {};
+  } catch (error) {
+    console.error('getTaskState error:', error.message, error.stack);
+    throw new Error(`Failed to fetch task states: ${error.message}`);
+  }
+};
+
+export const setTaskState = async (userId, taskId, state) => {
+  try {
+    const docRef = doc(db, 'users', userId, 'taskStates', 'states');
+    const currentStates = await getTaskState(userId);
+    if (state) {
+      currentStates[taskId] = {
+        inProgress: state.inProgress || false,
+        startTime: state.startTime || 0,
+        paused: state.paused || false,
+        pauseTime: state.pauseTime || 0,
+        timeRemaining: state.timeRemaining || 0,
+      };
+    } else {
+      delete currentStates[taskId];
+    }
+    console.log('Writing task state:', { userId, taskId, data: currentStates });
+    await setDoc(docRef, currentStates);
+  } catch (error) {
+    console.error('setTaskState error:', error.message, error.stack);
+    throw new Error(`Failed to save task state: ${error.message}`);
   }
 };

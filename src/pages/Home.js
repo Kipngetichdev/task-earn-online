@@ -36,6 +36,7 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import LogoutIcon from '@mui/icons-material/Logout';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useAuth } from '../context/AuthContext';
 import {
   getUserBalance,
@@ -107,119 +108,186 @@ function Home() {
   const [alert, setAlert] = useState({ open: false, message: '', severity: 'info' });
   const [modalOpen, setModalOpen] = useState(false);
   const [activationModalOpen, setActivationModalOpen] = useState(false);
+  const [withdrawalLimitModalOpen, setWithdrawalLimitModalOpen] = useState(false);
   const [isEditingPhone, setIsEditingPhone] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState(formatPhoneNumberForDisplay(user?.phone || ''));
-  const [transaction, setTransaction] = useState(null); // { clientReference, payheroReference, type }
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [transaction, setTransaction] = useState(null); // { clientReference: string, payheroReference: string, type: 'activation' | 'withdrawal' }
   const [failedAttempts, setFailedAttempts] = useState(0);
   const claimButtonRef = useRef(null);
   const activateButtonRef = useRef(null);
   const phoneInputRef = useRef(null);
+  const withdrawalLimitButtonRef = useRef(null);
+  const abortControllerRef = useRef(null);
   const MAX_FAILED_ATTEMPTS = 10;
+  const WITHDRAWAL_LIMIT = 1500;
+  const FETCH_TIMEOUT = 10000;
+
+  // Initialize phone number when user changes
+  useEffect(() => {
+    if (user?.phone) {
+      setPhoneNumber(formatPhoneNumberForDisplay(user.phone));
+    }
+  }, [user]);
 
   // Fetch balance and check welcome bonus
   useEffect(() => {
+    let mounted = true;
     const fetchData = async () => {
-      if (user) {
-        try {
-          const [balanceData, userDoc] = await Promise.all([
-            getUserBalance(user.userId),
-            getDoc(doc(db, 'users', user.userId)),
-          ]);
-          setBalance(balanceData);
-          const storedPhone = userDoc.data().phone || user.phone || '';
-          setPhoneNumber(formatPhoneNumberForDisplay(storedPhone));
-          if (!userDoc.data().hasClaimedWelcomeBonus) {
-            setTimeout(() => {
-              setModalOpen(true);
-              setTimeout(() => claimButtonRef.current?.focus(), 100);
-            }, 2000);
+      if (!user?.userId) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const [balanceData, userDoc] = await Promise.all([
+          getUserBalance(user.userId),
+          getDoc(doc(db, 'users', user.userId)),
+        ]);
+        if (mounted) {
+          setBalance(balanceData ?? 0);
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setPhoneNumber(formatPhoneNumberForDisplay(userData.phone || user.phone || ''));
+            if (!userData.hasClaimedWelcomeBonus) {
+              setTimeout(() => {
+                if (mounted) {
+                  setModalOpen(true);
+                  setTimeout(() => claimButtonRef.current?.focus(), 100);
+                }
+              }, 2000);
+            }
+          } else {
+            console.warn('User document does not exist for userId:', user.userId);
+            setAlert({
+              open: true,
+              message: 'User profile not found. Please contact support.',
+              severity: 'error',
+            });
           }
-        } catch (error) {
-          console.error('Fetch data error:', error.message, error.stack);
-          setAlert({ open: true, message: `Error fetching data: ${error.message}`, severity: 'error' });
+        }
+      } catch (error) {
+        console.error('Fetch data error:', error.message, error.stack);
+        if (mounted) {
+          setAlert({
+            open: true,
+            message: `Error fetching data: ${error.message}`,
+            severity: 'error',
+          });
         }
       }
-      setLoading(false);
+      if (mounted) {
+        setLoading(false);
+      }
     };
     fetchData();
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   // Poll transaction status for withdrawals and activations
   useEffect(() => {
-    if (!transaction?.payheroReference) {
-      console.log('No transaction to poll, transaction:', transaction);
-      return;
+    if (!transaction?.payheroReference || !process.env.REACT_APP_BASE_URL) {
+      console.log('No transaction to poll or missing BASE_URL:', {
+        transaction,
+        baseUrl: process.env.REACT_APP_BASE_URL,
+      });
+      return undefined;
     }
+
     console.log('Starting polling for transaction:', transaction);
     const pollStatus = async () => {
+      abortControllerRef.current = new AbortController();
       try {
         console.log('Polling transaction status for payheroReference:', transaction.payheroReference);
         const response = await fetch(
-          `${process.env.REACT_APP_BASE_URL}/api/transaction-status?reference=${transaction.payheroReference}`
+          `${process.env.REACT_APP_BASE_URL}/api/transaction-status?reference=${transaction.payheroReference}`,
+          {
+            signal: abortControllerRef.current.signal,
+          }
         );
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
         console.log('Transaction status response:', data);
-        if (data.success) {
-          const status = data.status;
-          setAlert({
-            open: true,
-            message: `Transaction status: ${status}`,
-            severity: status === 'SUCCESS' ? 'success' : status === 'FAILED' ? 'error' : 'info',
+
+        if (!data.success) {
+          throw new Error(data.error || 'Unknown error');
+        }
+
+        const status = data.status;
+        setAlert({
+          open: true,
+          message: `Transaction status: ${status}`,
+          severity: status === 'SUCCESS' ? 'success' : status === 'FAILED' ? 'error' : 'info',
+        });
+
+        if (['SUCCESS', 'FAILED', 'CANCELLED'].includes(status)) {
+          console.log('Updating transaction status in Firestore:', {
+            clientReference: transaction.clientReference,
+            status,
           });
-          if (status === 'SUCCESS' || status === 'FAILED' || status === 'CANCELLED') {
-            console.log('Updating transaction status in Firestore:', {
-              clientReference: transaction.clientReference,
-              status,
-            });
+          try {
             await updateDoc(doc(db, 'transactions', transaction.clientReference), { status });
-            if (status === 'SUCCESS') {
-              try {
-                const newBalance = await getUserBalance(user.userId);
-                setBalance(newBalance);
-                if (transaction.type === 'activation') {
-                  console.log('Updating user to isActive: true for userId:', user.userId);
-                  const userDoc = await getDoc(doc(db, 'users', user.userId));
-                  const currentData = userDoc.exists() ? userDoc.data() : {};
-                  await updateDoc(doc(db, 'users', user.userId), {
-                    isActive: true,
-                    userId: user.userId,
-                    balance: currentData.balance || 0,
-                  });
-                  console.log('User document updated with isActive: true');
-                  const updatedProfile = await getUserProfile(user.userId);
-                  const updatedUser = { ...user, ...updatedProfile, isActive: true };
-                  console.log('Logging in updated user:', updatedUser);
-                  login(updatedUser);
-                  setAlert({
-                    open: true,
-                    message: 'Account activated successfully! You can now perform tasks.',
-                    severity: 'success',
-                  });
-                  const updatedDoc = await getDoc(doc(db, 'users', user.userId));
-                  console.log('User document after activation:', updatedDoc.data());
+          } catch (firestoreError) {
+            console.error('Firestore update error:', firestoreError.message, firestoreError.stack);
+            setAlert({
+              open: true,
+              message: `Failed to update transaction: ${firestoreError.message}`,
+              severity: 'error',
+            });
+            setFailedAttempts((prev) => prev + 1);
+            return;
+          }
+
+          if (status === 'SUCCESS') {
+            try {
+              const newBalance = await getUserBalance(user.userId);
+              setBalance(newBalance ?? 0);
+
+              if (transaction.type === 'activation') {
+                console.log('Updating user to isActive: true for userId:', user.userId);
+                const userDoc = await getDoc(doc(db, 'users', user.userId));
+                if (!userDoc.exists()) {
+                  throw new Error('User document not found');
                 }
-              } catch (activationError) {
-                console.error('Activation error:', activationError.message, activationError.stack);
+                const currentData = userDoc.data();
+                await updateDoc(doc(db, 'users', user.userId), {
+                  isActive: true,
+                  userId: user.userId,
+                  balance: currentData.balance || 0,
+                });
+                console.log('User document updated with isActive: true');
+                const updatedProfile = await getUserProfile(user.userId);
+                const updatedUser = { ...user, ...updatedProfile, isActive: true };
+                console.log('Logging in updated user:', updatedUser);
+                login(updatedUser);
                 setAlert({
                   open: true,
-                  message: `Failed to activate account: ${activationError.message}`,
-                  severity: 'error',
+                  message: 'Account activated successfully! You can now perform tasks.',
+                  severity: 'success',
                 });
+                const updatedDoc = await getDoc(doc(db, 'users', user.userId));
+                console.log('User document after activation:', updatedDoc.data());
               }
+            } catch (activationError) {
+              console.error('Activation error:', activationError.message, activationError.stack);
+              setAlert({
+                open: true,
+                message: `Failed to activate account: ${activationError.message}`,
+                severity: 'error',
+              });
+              setFailedAttempts((prev) => prev + 1);
             }
-            setTransaction(null);
-            setFailedAttempts(0);
           }
-        } else {
-          console.error('Transaction status check failed:', data.error);
-          setFailedAttempts((prev) => prev + 1);
-          setAlert({
-            open: true,
-            message: `Transaction status check failed: ${data.error || 'Unknown error'}`,
-            severity: 'error',
-          });
+          setTransaction(null);
+          setFailedAttempts(0);
         }
       } catch (error) {
+        if (error.name === 'AbortError') {
+          console.log('Fetch aborted for transaction:', transaction.payheroReference);
+          return;
+        }
         console.error('Polling error:', error.message, error.stack);
         setFailedAttempts((prev) => prev + 1);
         setAlert({
@@ -228,6 +296,7 @@ function Home() {
           severity: 'error',
         });
       }
+
       if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
         console.error('Max failed attempts reached, stopping polling for reference:', transaction.payheroReference);
         setAlert({
@@ -239,8 +308,14 @@ function Home() {
         setFailedAttempts(0);
       }
     };
+
     const interval = setInterval(pollStatus, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [transaction, user, login, failedAttempts]);
 
   const toggleDrawer = useCallback((open) => () => {
@@ -273,8 +348,17 @@ function Home() {
       }, 1000);
       return;
     }
+    if (balance < WITHDRAWAL_LIMIT) {
+      setWithdrawalLimitModalOpen(true);
+      setTimeout(() => withdrawalLimitButtonRef.current?.focus(), 100);
+      return;
+    }
     if (balance <= 0) {
-      setAlert({ open: true, message: 'Insufficient balance for withdrawal', severity: 'warning' });
+      setAlert({
+        open: true,
+        message: 'Insufficient balance for withdrawal.',
+        severity: 'warning',
+      });
       return;
     }
     try {
@@ -284,27 +368,50 @@ function Home() {
         normalizePhoneNumber(phoneNumber),
         balance
       );
+      if (!reference || !payheroReference) {
+        throw new Error('Invalid withdrawal response');
+      }
       console.log('Withdrawal references:', { clientReference: reference, payheroReference });
       setTransaction({ clientReference: reference, payheroReference, type: 'withdrawal' });
-      setAlert({ open: true, message: 'Withdrawal initiated. Check your phone.', severity: 'success' });
+      setAlert({
+        open: true,
+        message: 'Withdrawal initiated. Check your phone.',
+        severity: 'success',
+      });
     } catch (error) {
       console.error('Withdrawal error:', error.message, error.stack);
-      setAlert({ open: true, message: `Withdrawal failed: ${error.message}`, severity: 'error' });
+      setAlert({
+        open: true,
+        message: `Withdrawal failed: ${error.message}`,
+        severity: 'error',
+      });
     }
-  }, [user, balance, phoneNumber]);
+  }, [user, balance, phoneNumber, WITHDRAWAL_LIMIT]);
 
   const handleClaimBonus = useCallback(async () => {
+    if (!user?.userId) {
+      setAlert({
+        open: true,
+        message: 'User not authenticated. Please log in again.',
+        severity: 'error',
+      });
+      return;
+    }
     try {
       console.log('Claiming welcome bonus for user:', user.userId);
       await claimWelcomeBonus(user.userId, bonusData.amount);
       const newBalance = await getUserBalance(user.userId);
-      setBalance(newBalance);
+      setBalance(newBalance ?? 0);
       setModalOpen(false);
-      setAlert({ open: true, message: 'Welcome bonus claimed successfully!', severity: 'success' });
+      setAlert({
+        open: true,
+        message: 'Welcome bonus claimed successfully!',
+        severity: 'success',
+      });
       const updatedUser = { ...user, hasClaimedWelcomeBonus: true };
       console.log('Logging in updated user with hasClaimedWelcomeBonus:', updatedUser);
       login(updatedUser);
-      if (!user?.isActive) {
+      if (!user.isActive) {
         setTimeout(() => {
           setActivationModalOpen(true);
           setTimeout(() => activateButtonRef.current?.focus(), 100);
@@ -312,12 +419,24 @@ function Home() {
       }
     } catch (error) {
       console.error('Claim bonus error:', error.message, error.stack);
-      setAlert({ open: true, message: `Failed to claim bonus: ${error.message}`, severity: 'error' });
+      setAlert({
+        open: true,
+        message: `Failed to claim bonus: ${error.message}`,
+        severity: 'error',
+      });
       setModalOpen(false);
     }
   }, [user, login]);
 
   const handleActivateAccount = useCallback(async () => {
+    if (!user?.userId) {
+      setAlert({
+        open: true,
+        message: 'User not authenticated. Please log in again.',
+        severity: 'error',
+      });
+      return;
+    }
     try {
       console.log('Starting handleActivateAccount, phoneNumber:', phoneNumber);
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
@@ -325,7 +444,10 @@ function Home() {
       if (normalizedPhone !== user.phone) {
         console.log('Updating user phone in Firestore');
         const userDoc = await getDoc(doc(db, 'users', user.userId));
-        const currentData = userDoc.exists() ? userDoc.data() : {};
+        if (!userDoc.exists()) {
+          throw new Error('User document not found');
+        }
+        const currentData = userDoc.data();
         await updateUserProfile(user.userId, {
           phone: normalizedPhone,
           userId: user.userId,
@@ -339,6 +461,9 @@ function Home() {
       }
       console.log('Initiating account activation for user:', user.userId);
       const { reference, payheroReference } = await activateUserAccount(user.userId, normalizedPhone);
+      if (!reference || !payheroReference) {
+        throw new Error('Invalid activation response');
+      }
       console.log('Activation references:', { clientReference: reference, payheroReference });
       setTransaction({ clientReference: reference, payheroReference, type: 'activation' });
       console.log('Transaction set:', { clientReference: reference, payheroReference, type: 'activation' });
@@ -367,11 +492,22 @@ function Home() {
   }, []);
 
   const handleSavePhone = useCallback(async () => {
+    if (!user?.userId) {
+      setAlert({
+        open: true,
+        message: 'User not authenticated. Please log in again.',
+        severity: 'error',
+      });
+      return;
+    }
     try {
       console.log('Saving phone number:', phoneNumber);
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
       const userDoc = await getDoc(doc(db, 'users', user.userId));
-      const currentData = userDoc.exists() ? userDoc.data() : {};
+      if (!userDoc.exists()) {
+        throw new Error('User document not found');
+      }
+      const currentData = userDoc.data();
       await updateUserProfile(user.userId, {
         phone: normalizedPhone,
         userId: user.userId,
@@ -383,7 +519,11 @@ function Home() {
       login(updatedUser);
       setPhoneNumber(formatPhoneNumberForDisplay(normalizedPhone));
       setIsEditingPhone(false);
-      setAlert({ open: true, message: 'Phone number saved successfully', severity: 'success' });
+      setAlert({
+        open: true,
+        message: 'Phone number saved successfully',
+        severity: 'success',
+      });
     } catch (error) {
       console.error('Save phone error:', error.message, error.stack);
       setAlert({
@@ -399,6 +539,22 @@ function Home() {
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         <CircularProgress />
       </Box>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Container maxWidth="sm" sx={{ py: 4, textAlign: 'center' }}>
+        <Typography variant="h3">Please log in to continue</Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => navigate('/login')}
+          sx={{ mt: 2, borderRadius: 2 }}
+        >
+          Go to Login
+        </Button>
+      </Container>
     );
   }
 
@@ -461,6 +617,7 @@ function Home() {
       </Drawer>
       <Modal
         open={modalOpen}
+        onClose={() => setModalOpen(false)}
         closeAfterTransition
         aria-labelledby="welcome-bonus-modal-title"
         aria-describedby="welcome-bonus-modal-description"
@@ -478,6 +635,7 @@ function Home() {
               boxShadow: 24,
               p: 4,
               textAlign: 'center',
+              width: '80%',
             }}
           >
             <img
@@ -492,10 +650,10 @@ function Home() {
               }}
             />
             <Typography id="welcome-bonus-modal-title" variant="h2" gutterBottom>
-              Congratulations {user?.name}!
+              Congratulations {user.name || 'User'}!
             </Typography>
             <Typography id="welcome-bonus-modal-description" variant="body1" sx={{ mb: 3 }}>
-              You have received KES 499 welcome bonus.
+              You have received KES {bonusData.amount} welcome bonus.
             </Typography>
             <TableContainer component={Paper} sx={{ mb: 3 }}>
               <Table aria-label="Welcome bonus details">
@@ -530,6 +688,7 @@ function Home() {
       </Modal>
       <Modal
         open={activationModalOpen}
+        onClose={() => setActivationModalOpen(false)}
         closeAfterTransition
         aria-labelledby="activation-modal-title"
         aria-describedby="activation-modal-description"
@@ -547,13 +706,14 @@ function Home() {
               boxShadow: 24,
               p: 4,
               textAlign: 'center',
+              width: '80%',
             }}
           >
             <Typography id="activation-modal-title" variant="h2" gutterBottom>
               Activate Your Account
             </Typography>
             <Typography id="activation-modal-description" variant="body1" sx={{ mb: 2 }}>
-              One-time fee of KES 120 only
+              One-time fee of KES 1 only
             </Typography>
             <Typography variant="body1" sx={{ mb: 1, fontWeight: 500 }}>
               Payment Phone Number
@@ -569,11 +729,18 @@ function Home() {
                     aria-label="Edit phone number"
                     sx={{ maxWidth: 200 }}
                     inputProps={{ maxLength: 13 }}
+                    error={phoneNumber && !/^(0|\+?254)\d{9}$/.test(phoneNumber)}
+                    helperText={
+                      phoneNumber && !/^(0|\+?254)\d{9}$/.test(phoneNumber)
+                        ? 'Invalid phone number'
+                        : ''
+                    }
                   />
                   <IconButton
                     onClick={handleSavePhone}
                     aria-label="Save phone number"
                     sx={{ color: theme.palette.success.main }}
+                    disabled={!phoneNumber || !/^(0|\+?254)\d{9}$/.test(phoneNumber)}
                   >
                     <SaveIcon />
                   </IconButton>
@@ -605,6 +772,53 @@ function Home() {
           </Box>
         </Fade>
       </Modal>
+      <Modal
+        open={withdrawalLimitModalOpen}
+        onClose={() => setWithdrawalLimitModalOpen(false)}
+        closeAfterTransition
+        aria-labelledby="withdrawal-limit-modal-title"
+        aria-describedby="withdrawal-limit-modal-description"
+      >
+        <Fade in={withdrawalLimitModalOpen} timeout={500}>
+          <Box
+            sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: { xs: '90%', sm: 400 },
+              bgcolor: theme.palette.background.paper,
+              borderRadius: 1,
+              boxShadow: 24,
+              p: 4,
+              textAlign: 'center',
+              width: '80%',
+            }}
+          >
+            <WarningAmberIcon
+              sx={{ fontSize: 60, color: theme.palette.warning.main, mb: 2 }}
+              aria-label="Caution icon"
+            />
+            <Typography id="withdrawal-limit-modal-title" variant="h2" gutterBottom>
+              Withdrawal Limit
+            </Typography>
+            <Typography id="withdrawal-limit-modal-description" variant="body1" sx={{ mb: 3 }}>
+              Your balance (KES {balance}) is below the minimum withdrawal limit of KES {WITHDRAWAL_LIMIT}. Please
+              continue completing tasks to reach the required amount.
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => setWithdrawalLimitModalOpen(false)}
+              sx={{ borderRadius: 2, minWidth: 200 }}
+              ref={withdrawalLimitButtonRef}
+              aria-label="Close withdrawal limit modal"
+            >
+              Continue Tasks
+            </Button>
+          </Box>
+        </Fade>
+      </Modal>
       <Routes>
         <Route
           path="/"
@@ -629,7 +843,7 @@ function Home() {
               >
                 <CardContent>
                   <Typography variant="h3" gutterBottom sx={{ fontWeight: 800 }}>
-                    Hello {user?.name}! 👋
+                    Hello {user.name || 'User'}! 👋
                   </Typography>
                   <Typography variant="h3" gutterBottom>
                     Your Balance

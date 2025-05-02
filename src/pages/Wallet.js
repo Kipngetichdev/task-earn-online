@@ -34,6 +34,9 @@ import WithdrawalModal from '../components/WithdrawalModal';
 import { getUserBalance, getWithdrawalHistory, initiateWithdrawal } from '../services/firestore';
 import { useAuth } from '../context/AuthContext';
 
+// Constants
+const WITHDRAWAL_LIMIT = 1500;
+
 // Utility to format date as "MMM YYYY" (e.g., "Jan 2025")
 const formatMonth = (timestamp) => {
   if (!timestamp) return 'N/A';
@@ -82,29 +85,37 @@ function Wallet({ onActivateRequest }) {
 
   // Fetch balance and withdrawal history
   useEffect(() => {
-    if (user) {
-      const fetchData = async () => {
-        try {
-          const [balanceData, historyData] = await Promise.all([
-            getUserBalance(user.userId),
-            getWithdrawalHistory(user.userId),
-          ]);
-          setBalance(balanceData);
-          setHistory(historyData);
-        } catch (error) {
-          console.error('Wallet data fetch error:', error.message, error.stack);
+    let mounted = true;
+    const fetchData = async () => {
+      if (!user?.userId) {
+        if (mounted) setLoading(false);
+        return;
+      }
+      try {
+        const [balanceData, historyData] = await Promise.all([
+          getUserBalance(user.userId),
+          getWithdrawalHistory(user.userId),
+        ]);
+        if (mounted) {
+          setBalance(balanceData ?? 0);
+          setHistory(historyData ?? []);
+        }
+      } catch (error) {
+        console.error('Wallet data fetch error:', error.message, error.stack);
+        if (mounted) {
           setAlert({
             open: true,
             message: `Error loading wallet data: ${error.message}`,
             severity: 'error',
           });
         }
-        setLoading(false);
-      };
-      fetchData();
-    } else {
-      setLoading(false);
-    }
+      }
+      if (mounted) setLoading(false);
+    };
+    fetchData();
+    return () => {
+      mounted = false;
+    };
   }, [user]);
 
   // Handle Withdraw button click
@@ -119,7 +130,7 @@ function Wallet({ onActivateRequest }) {
       if (onActivateRequest) {
         setTimeout(() => {
           console.log('Triggering onActivateRequest for activation modal');
-          onActivateRequest(); // Trigger Home.js activation modal
+          onActivateRequest();
         }, 1000);
       } else {
         console.error('onActivateRequest callback not provided');
@@ -129,9 +140,16 @@ function Wallet({ onActivateRequest }) {
           severity: 'error',
         });
       }
+    } else if (balance < WITHDRAWAL_LIMIT) {
+      console.log('Withdraw attempted with insufficient balance:', balance, 'Limit:', WITHDRAWAL_LIMIT);
+      setAlert({
+        open: true,
+        message: `Your balance (KES ${balance}) is below the minimum withdrawal limit of KES ${WITHDRAWAL_LIMIT}. Please complete more tasks.`,
+        severity: 'warning',
+      });
     } else {
       console.log('Opening WithdrawalModal for active user:', user?.userId);
-      setOpenModal(true); // Open WithdrawalModal for active users
+      setOpenModal(true);
     }
   };
 
@@ -147,9 +165,20 @@ function Wallet({ onActivateRequest }) {
       if (onActivateRequest) {
         setTimeout(() => {
           console.log('Triggering onActivateRequest from handleWithdraw');
-          onActivateRequest(); // Trigger Home.js activation modal
+          onActivateRequest();
         }, 1000);
       }
+      setOpenModal(false);
+      return;
+    }
+
+    if (amount < WITHDRAWAL_LIMIT) {
+      console.error('Withdrawal amount below limit:', amount, 'Limit:', WITHDRAWAL_LIMIT);
+      setAlert({
+        open: true,
+        message: `Withdrawal amount must be at least KES ${WITHDRAWAL_LIMIT}.`,
+        severity: 'error',
+      });
       setOpenModal(false);
       return;
     }
@@ -158,7 +187,7 @@ function Wallet({ onActivateRequest }) {
       console.error('Invalid withdrawal amount:', amount, 'Balance:', balance);
       setAlert({
         open: true,
-        message: 'Invalid withdrawal amount.',
+        message: 'Invalid withdrawal amount. Amount must be positive and not exceed your balance.',
         severity: 'error',
       });
       setOpenModal(false);
@@ -168,13 +197,16 @@ function Wallet({ onActivateRequest }) {
     try {
       console.log('Initiating withdrawal:', { userId: user.userId, phone, amount });
       const reference = await initiateWithdrawal(user.userId, phone, amount);
+      if (!reference) {
+        throw new Error('Invalid withdrawal response');
+      }
       console.log('Withdrawal reference:', reference);
       const [newBalance, newHistory] = await Promise.all([
         getUserBalance(user.userId),
         getWithdrawalHistory(user.userId),
       ]);
-      setBalance(newBalance);
-      setHistory(newHistory);
+      setBalance(newBalance ?? 0);
+      setHistory(newHistory ?? []);
       setAlert({
         open: true,
         message: 'Withdrawal initiated successfully. Check your phone.',
@@ -237,9 +269,7 @@ function Wallet({ onActivateRequest }) {
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                 <MonetizationOn color="primary" />
-                <Typography variant="h4">
-                  Balance
-                </Typography>
+                <Typography variant="h4">Balance</Typography>
               </Stack>
               <Typography variant="h3" color="primary.main" align="center" sx={{ mb: 2 }}>
                 KES {balance}
@@ -263,9 +293,7 @@ function Wallet({ onActivateRequest }) {
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                 <History color="primary" />
-                <Typography variant="h4">
-                  Withdrawal History
-                </Typography>
+                <Typography variant="h4">Withdrawal History</Typography>
               </Stack>
               {history.length === 0 ? (
                 <Typography color="text.secondary" align="center">
@@ -302,9 +330,7 @@ function Wallet({ onActivateRequest }) {
             <CardContent>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                 <BarChartIcon color="primary" />
-                <Typography variant="h4">
-                  Withdrawal Trends
-                </Typography>
+                <Typography variant="h4">Withdrawal Trends</Typography>
               </Stack>
               {months.length === 0 ? (
                 <Typography color="text.secondary" align="center">
@@ -341,6 +367,7 @@ function Wallet({ onActivateRequest }) {
         open={openModal}
         onClose={() => setOpenModal(false)}
         onWithdraw={handleWithdraw}
+        minAmount={WITHDRAWAL_LIMIT} // Pass minimum withdrawal limit to modal
       />
     </Container>
   );
