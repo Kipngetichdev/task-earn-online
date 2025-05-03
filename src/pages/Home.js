@@ -113,6 +113,7 @@ function Home() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [transaction, setTransaction] = useState(null); // { clientReference: string, payheroReference: string, type: 'activation' | 'withdrawal' }
   const [failedAttempts, setFailedAttempts] = useState(0);
+  const [activating, setActivating] = useState(false);
   const claimButtonRef = useRef(null);
   const activateButtonRef = useRef(null);
   const phoneInputRef = useRef(null);
@@ -121,6 +122,7 @@ function Home() {
   const MAX_FAILED_ATTEMPTS = 10;
   const WITHDRAWAL_LIMIT = 1500;
   const FETCH_TIMEOUT = 10000;
+  
 
   // Initialize phone number when user changes
   useEffect(() => {
@@ -437,10 +439,14 @@ function Home() {
       });
       return;
     }
+    
+    setActivating(true); // Start loading
+    
     try {
       console.log('Starting handleActivateAccount, phoneNumber:', phoneNumber);
       const normalizedPhone = normalizePhoneNumber(phoneNumber);
       console.log('Normalized phone:', normalizedPhone);
+      
       if (normalizedPhone !== user.phone) {
         console.log('Updating user phone in Firestore');
         const userDoc = await getDoc(doc(db, 'users', user.userId));
@@ -459,11 +465,14 @@ function Home() {
         login(updatedUser);
         setPhoneNumber(formatPhoneNumberForDisplay(normalizedPhone));
       }
+      
       console.log('Initiating account activation for user:', user.userId);
       const { reference, payheroReference } = await activateUserAccount(user.userId, normalizedPhone);
+      
       if (!reference || !payheroReference) {
         throw new Error('Invalid activation response');
       }
+      
       console.log('Activation references:', { clientReference: reference, payheroReference });
       setTransaction({ clientReference: reference, payheroReference, type: 'activation' });
       console.log('Transaction set:', { clientReference: reference, payheroReference, type: 'activation' });
@@ -483,6 +492,8 @@ function Home() {
       });
       setActivationModalOpen(false);
       setIsEditingPhone(false);
+    } finally {
+      setActivating(false); // Stop loading regardless of success/failure
     }
   }, [user, phoneNumber, login]);
 
@@ -763,11 +774,13 @@ function Home() {
               color="primary"
               onClick={handleActivateAccount}
               sx={{ borderRadius: 2, minWidth: 200 }}
-              ref={activateButtonRef}
-              aria-label="Activate account"
-              disabled={isEditingPhone}
+              disabled={isEditingPhone || activating}
             >
-              Activate Now
+              {activating ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                'Activate Now'
+              )}
             </Button>
           </Box>
         </Fade>
