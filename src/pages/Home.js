@@ -53,6 +53,8 @@ import Tasks from '../components/Tasks';
 import Rewards from './Rewards';
 import Wallet from './Wallet';
 import Profile from './Profile';
+import RecentPayoutsToast from '../components/RecentPayoutsToast';
+import { Navigate } from 'react-router-dom';
 
 const drawerItems = [
   { label: 'Home', path: '/home', icon: <HomeIcon /> },
@@ -846,6 +848,7 @@ function Home() {
                   {alert.message}
                 </Alert>
               )}
+              <RecentPayoutsToast />
               <Card
                 sx={{
                   mb: 4,
