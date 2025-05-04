@@ -4,12 +4,28 @@ import { useTheme } from '@mui/material/styles';
 
 // List of 20 random Kenyan names
 const kenyanNames = [
-  'Wanjiku Mwangi', 'Kamau Kariuki', 'Aisha Otieno', 'Juma Kipkorir',
-  'Fatuma Njoroge', 'Ochieng Wambui', 'Njeri Kiptoo', 'Musa Cheruiyot',
-  'Grace Wairimu', 'Kibet Omondi', 'Halima Chebet', 'Okoth Ngugi',
-  'Lilian Mburu', 'Korir Achieng', 'Mercy Wafula', 'Barasa Nyambura',
-  'Esther Koech', 'Maina Atieno', 'Salma Rotich', 'Kipchumba Gacheri',
+  'Wanjiku Mwangi', 
+  'Kamau Kariuki',   
+  'Aisha Abdalla',        
+  'Juma Mwashimba',      
+  'Fatuma Hassan',       
+  'Ochieng Odhiambo',     
+  'Njeri Wanjiku',        
+  'Musa Ali',             
+  'Grace Wairimu',       
+  'Kibet Kiprono',      
+  'Halima Hassan',       
+  'Okoth Odhiambo',      
+  'Lilian Mburu',        
+  'Korir Kiplangat',   
+  'Mercy Wafula',        
+  'Barasa Wekesa',      
+  'Esther Koech',       
+  'Atieno Akinyi',      
+  'Salma Ahmed',        
+  'Kipchumba arap Kigen',
 ];
+
 
 // Generate random amount between 1500 and 6000
 const getRandomAmount = () => Math.floor(Math.random() * (6000 - 1500 + 1)) + 1500;
@@ -68,10 +84,10 @@ function RecentPayoutsToast() {
         aria-live="polite"
       >
         <Typography
-          variant="body1"
           sx={{
             fontWeight: 500,
-            color: theme.palette.success.dark, // Text matches border color
+            color: theme.palette.success.dark,
+            fontSize: '12px',
           }}
         >
           {currentPayout.name} has received KES {currentPayout.amount}
