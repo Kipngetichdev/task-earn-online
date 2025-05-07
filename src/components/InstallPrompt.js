@@ -37,9 +37,9 @@ function InstallPrompt() {
           <Button color="primary" size="large" onClick={handleInstall}>
             Install
           </Button>
-          <Button color="secondary" size="large" onClick={handleDownloadApk}>
+          {/* <Button color="secondary" size="large" onClick={handleDownloadApk}>
             APK
-          </Button>
+          </Button> */}
         </>
       }
       sx={{ bottom: 80 }} // Above bottom navigation
