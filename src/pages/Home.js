@@ -419,7 +419,7 @@ function Home() {
         setTimeout(() => {
           setActivationModalOpen(true);
           setTimeout(() => activateButtonRef.current?.focus(), 100);
-        }, 1000);
+        }, 7000);
       }
     } catch (error) {
       console.error('Claim bonus error:', error.message, error.stack);
