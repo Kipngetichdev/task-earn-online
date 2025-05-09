@@ -7,7 +7,7 @@ const axios = require('axios');
 module.exports = async (req, res) => {
   // Handle CORS preflight request (OPTIONS)
   if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Allow-Origin', 'https://taskspay-to-mpesa.vercel.app');
+    res.setHeader('Access-Control-Allow-Origin', 'https://tasks-earn-app.vercel.app');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     return res.status(200).end();
@@ -15,12 +15,12 @@ module.exports = async (req, res) => {
 
   // Validate request method
   if (req.method !== 'POST') {
-    res.setHeader('Access-Control-Allow-Origin', 'https://taskspay-to-mpesa.vercel.app');
+    res.setHeader('Access-Control-Allow-Origin', 'https://tasks-earn-app.vercel.app');
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
   // Set CORS headers for POST
-  res.setHeader('Access-Control-Allow-Origin', 'https://taskspay-to-mpesa.vercel.app');
+  res.setHeader('Access-Control-Allow-Origin', 'https://tasks-earn-app.vercel.app');
   res.setHeader('Access-Control-Allow-Methods', 'POST');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
@@ -62,7 +62,7 @@ module.exports = async (req, res) => {
     const payload = {
       amount: Number(amount),
       phone_number: formattedPhone,
-      channel_id: 2209,
+      channel_id: 2211,
       provider: 'm-pesa',
       external_reference: reference,
       callback_url: callbackUrl,
