@@ -107,7 +107,7 @@ export const activateUserAccount = async (userId, phoneNumber) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         phoneNumber,
-        amount: 100,
+        amount: 150,
         reference: clientReference,
       }),
     });
