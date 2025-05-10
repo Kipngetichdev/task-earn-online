@@ -31,7 +31,7 @@ import { useAuth } from '../context/AuthContext';
 import { generateReferralCode, getReferralHistory } from '../services/firestore';
 
 // Define the app's base URL (replace with your actual app URL)
-const APP_URL = 'https://tasks-earn-app.vercel.app/';
+const APP_URL = 'http://localhost:3000';
 
 // Format timestamp as "MMM YYYY"
 const formatMonth = (timestamp) => {
