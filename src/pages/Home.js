@@ -726,7 +726,7 @@ function Home() {
               Activate Your Account
             </Typography>
             <Typography id="activation-modal-description" variant="body1" sx={{ mb: 2 }}>
-              One-time fee of KES 150 only
+              One-time fee of KES 100 only
             </Typography>
             <Typography variant="body1" sx={{ mb: 1, fontWeight: 500 }}>
               Payment Phone Number
